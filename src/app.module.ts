@@ -8,9 +8,11 @@ import { AuthModule } from './auth/auth.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtGlobalGuard } from './auth/guards/jwt-global.guard';
 import { UsersModule } from './users/users/users.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
+    PrismaModule,
     AuthModule,
     UsersModule,
     ConfigModule.forRoot({

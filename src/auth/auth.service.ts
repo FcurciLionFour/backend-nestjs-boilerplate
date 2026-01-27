@@ -89,6 +89,7 @@ export class AuthService {
       where: { id: userId },
       data: { refreshToken: hashedRefreshToken },
     });
+    console.log('JWT_SECRET', process.env.JWT_SECRET);
 
     return {
       accessToken,
