@@ -6,8 +6,10 @@ export default () => ({
   database: {
     url: process.env.DATABASE_URL,
   },
-
   jwt: {
-    secret: process.env.JWT_SECRET,
+    accessSecret: process.env.JWT_ACCESS_SECRET,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    accessExpiresIn: '15m',
+    refreshExpiresIn: '7d',
   },
 });
