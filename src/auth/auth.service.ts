@@ -40,21 +40,30 @@ export class AuthService {
     return this.issueTokens(user.id, user.role);
   }
 
-  async refresh(userId: string, refreshToken: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+  async refresh(refreshToken: string) {
+    try {
+      const payload = this.jwt.verify(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
 
-    if (!user || !user.refreshToken) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user || !user.refreshToken) {
+        throw new UnauthorizedException();
+      }
+
+      const isValid = await bcrypt.compare(refreshToken, user.refreshToken);
+
+      if (!isValid) {
+        throw new UnauthorizedException();
+      }
+
+      return this.issueTokens(user.id, user.role);
+    } catch {
       throw new UnauthorizedException();
     }
-
-    const valid = await bcrypt.compare(refreshToken, user.refreshToken);
-    if (!valid) {
-      throw new UnauthorizedException();
-    }
-
-    return this.issueTokens(user.id, user.role);
   }
 
   async logout(userId: string) {

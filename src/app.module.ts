@@ -7,10 +7,12 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtGlobalGuard } from './auth/guards/jwt-global.guard';
+import { UsersModule } from './users/users/users.module';
 
 @Module({
   imports: [
     AuthModule,
+    UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
