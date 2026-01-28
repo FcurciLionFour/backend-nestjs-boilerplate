@@ -5,6 +5,7 @@ import {
   Req,
   Res,
   UseGuards,
+  Get,
 } from '@nestjs/common';
 
 import type { Request, Response } from 'express'; // 👈 CLAVE
@@ -13,10 +14,12 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
 import { RegisterDto } from './dto/register.dto';
+import { randomUUID } from 'crypto';
+import { CsrfGuard } from './guards/csrf.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
   @Public()
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -38,11 +41,13 @@ export class AuthController {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      path: '/auth/refresh',
+      path: '/',
     });
 
     return { accessToken: tokens.accessToken };
   }
+
+  @UseGuards(CsrfGuard)
   @Public()
   @Post('refresh')
   async refresh(
@@ -66,18 +71,30 @@ export class AuthController {
     return { accessToken: tokens.accessToken };
   }
 
+  @UseGuards(CsrfGuard)
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  async logout(
-    @Req() req: any,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: any, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(req.user.sid);
 
     res.clearCookie('refresh_token', {
-      path: '/auth/refresh',
+      path: '/',
     });
 
     return { success: true };
+  }
+  @Public()
+  @Get('csrf')
+  getCsrf(@Res({ passthrough: true }) res: Response) {
+    const csrfToken = randomUUID();
+
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: false, // clave para double submit
+      sameSite: 'lax', // luego puede ser 'none'
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
+    return { ok: true };
   }
 }
