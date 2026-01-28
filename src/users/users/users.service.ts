@@ -143,6 +143,8 @@ export class UsersService {
     targetUserId: string,
     requesterUserId: string,
   ): Promise<void> {
+    console.log('targetUserId:', targetUserId);
+    console.log('requesterUserId:', requesterUserId);
     if (targetUserId === requesterUserId) {
       return;
     }

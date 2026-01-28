@@ -6,7 +6,6 @@ import {
   Delete,
   Param,
   Body,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -14,15 +13,18 @@ import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import { RequirePermissions } from 'src/auth/decorators/permissions.decorator';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { JwtGlobalGuard } from 'src/auth/guards/jwt-global.guard';
 
 @Controller('users')
-@UseGuards(PermissionsGuard)
+@UseGuards(JwtGlobalGuard, PermissionsGuard)
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
   // 📖 LISTAR USUARIOS
   @RequirePermissions('users.read')
   @Get()
+  @UseGuards(PermissionsGuard)
   findAll(): Promise<UserResponseDto[]> {
     return this.usersService.findAll();
   }
@@ -30,23 +32,24 @@ export class UsersController {
   // 👤 PERFIL PROPIO
   @RequirePermissions('users.read')
   @Get('me')
-  me(@Req() req: Request) {
-    return req.user;
+  me(@CurrentUser() user: { sub: string }) {
+    return user;
   }
 
   // 🔍 OBTENER USUARIO
-  @RequirePermissions('users.read')
   @Get(':id')
+  @UseGuards(PermissionsGuard)
   findOne(
     @Param('id') id: string,
-    @Req() req: Request,
+    @CurrentUser() user: { sub: string },
   ): Promise<UserResponseDto | null> {
-    return this.usersService.findById(id, req.user!.sub);
+    return this.usersService.findById(id, user.sub);
   }
 
   // ➕ CREAR USUARIO
   @RequirePermissions('users.write')
   @Post()
+  @UseGuards(PermissionsGuard)
   create(@Body() body: any) {
     return this.usersService.create(body);
   }
@@ -54,14 +57,20 @@ export class UsersController {
   // ✏️ ACTUALIZAR USUARIO
   @RequirePermissions('users.write')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any, @Req() req: Request) {
-    return this.usersService.update(id, body, req.user!.sub);
+  @UseGuards(PermissionsGuard)
+  update(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.usersService.update(id, body, user.sub);
   }
 
   // 🗑️ BORRAR / DESACTIVAR USUARIO
   @RequirePermissions('users.write')
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: Request) {
-    return this.usersService.remove(id, req.user!.sub);
+  @UseGuards(PermissionsGuard)
+  remove(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.usersService.remove(id, user.sub);
   }
 }
