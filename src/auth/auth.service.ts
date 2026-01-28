@@ -1,7 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -10,25 +15,22 @@ export class AuthService {
     private jwt: JwtService,
   ) {}
 
-  async register(email: string, password: string) {
-    const hashedPassword: string = await bcrypt.hash(password, 10);
+  /* ---------------- REGISTER / LOGIN ---------------- */
+
+  async register(email: string, password: string, meta?: SessionMeta) {
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await this.prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-      },
+      data: { email, password: hashedPassword },
     });
 
-    return this.issueTokens(user.id, user.role);
+    return this.createSession(user.id, meta);
   }
 
-  async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
+  async login(email: string, password: string, meta?: SessionMeta) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user) {
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -37,44 +39,83 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.issueTokens(user.id, user.role);
+    return this.createSession(user.id, meta);
   }
 
-  async refresh(refreshToken: string) {
+  /* ---------------- REFRESH ---------------- */
+
+  async refresh(refreshToken: string, meta?: SessionMeta) {
+    let payload: any;
+
     try {
-      const payload = this.jwt.verify(refreshToken, {
+      payload = this.jwt.verify(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
-
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-      });
-
-      if (!user || !user.refreshToken) {
-        throw new UnauthorizedException();
-      }
-
-      const isValid = await bcrypt.compare(refreshToken, user.refreshToken);
-
-      if (!isValid) {
-        throw new UnauthorizedException();
-      }
-
-      return this.issueTokens(user.id, user.role);
     } catch {
       throw new UnauthorizedException();
     }
+
+    const session = await this.prisma.authSession.findUnique({
+      where: { id: payload.sid },
+    });
+
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      throw new UnauthorizedException();
+    }
+
+    const valid = await bcrypt.compare(
+      refreshToken,
+      session.hashedRefreshToken,
+    );
+
+    // 🔥 reuse detection
+    if (!valid) {
+      await this.prisma.authSession.updateMany({
+        where: { userId: session.userId },
+        data: { revokedAt: new Date() },
+      });
+
+      throw new ForbiddenException('Refresh token reuse detected');
+    }
+
+    // rotación
+    await this.prisma.authSession.update({
+      where: { id: session.id },
+      data: { revokedAt: new Date(), lastUsedAt: new Date() },
+    });
+
+    return this.createSession(session.userId, meta, session.id);
   }
 
-  async logout(userId: string) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: null },
+  /* ---------------- LOGOUT ---------------- */
+
+  async logout(sessionId: string) {
+    await this.prisma.authSession.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
     });
   }
 
-  private async issueTokens(userId: string, role: string) {
-    const payload = { sub: userId, role };
+  async logoutAll(userId: string) {
+    await this.prisma.authSession.updateMany({
+      where: { userId },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  /* ---------------- CORE ---------------- */
+
+  private async createSession(
+    userId: string,
+    meta?: SessionMeta,
+    replacedById?: string,
+  ) {
+    const sessionId = randomUUID();
+
+    const payload = {
+      sub: userId,
+      sid: sessionId,
+    };
 
     const accessToken = this.jwt.sign(payload);
 
@@ -85,15 +126,25 @@ export class AuthService {
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: hashedRefreshToken },
+    await this.prisma.authSession.create({
+      data: {
+        id: sessionId,
+        userId,
+        hashedRefreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ip: meta?.ip,
+        userAgent: meta?.userAgent,
+        replacedById,
+      },
     });
-    console.log('JWT_SECRET', process.env.JWT_SECRET);
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
+}
+
+/* -------- TYPES -------- */
+
+interface SessionMeta {
+  ip?: string;
+  userAgent?: string;
 }
