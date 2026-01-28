@@ -30,7 +30,6 @@ export class UsersController {
   }
 
   // 👤 PERFIL PROPIO
-  @RequirePermissions('users.read')
   @Get('me')
   me(@CurrentUser() user: { sub: string }) {
     return user;

@@ -40,10 +40,6 @@ export class UsersService {
     requesterId: string,
   ): Promise<UserResponseDto | null> {
     await this.assertCanAccessUser(id, requesterId);
-    if (id !== requesterId) {
-      // acá más adelante podrías chequear si es ADMIN
-      throw new ForbiddenException('Access denied');
-    }
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -143,12 +139,7 @@ export class UsersService {
     targetUserId: string,
     requesterUserId: string,
   ): Promise<void> {
-    console.log('targetUserId:', targetUserId);
-    console.log('requesterUserId:', requesterUserId);
-    if (targetUserId === requesterUserId) {
-      return;
-    }
-
+    // 1️⃣ Si es ADMIN → acceso total
     const isAdmin = await this.prisma.userRole.findFirst({
       where: {
         userId: requesterUserId,
@@ -158,8 +149,16 @@ export class UsersService {
       },
     });
 
-    if (!isAdmin) {
-      throw new ForbiddenException('Access denied');
+    if (isAdmin) {
+      return;
     }
+
+    // 2️⃣ Si no es admin, solo puede acceder a sí mismo
+    if (targetUserId === requesterUserId) {
+      return;
+    }
+
+    // 3️⃣ Caso contrario → forbidden
+    throw new ForbiddenException('Access denied');
   }
 }

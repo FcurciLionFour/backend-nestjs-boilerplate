@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -18,10 +19,6 @@ export class PermissionsGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<any>();
-    const userId = req.user?.sub;
-
-    // Si no hay usuario, dejamos que JwtAuthGuard falle
-    if (!userId) return true;
 
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
@@ -40,6 +37,12 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
+    // 🔥 CLAVE: si se requiere algo y no hay usuario => 401
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
     // Traemos roles + permisos del usuario
     const userRoles = await this.prisma.userRole.findMany({
       where: { userId },
@@ -47,24 +50,25 @@ export class PermissionsGuard implements CanActivate {
         role: {
           include: {
             permissions: {
-              include: {
-                permission: true,
-              },
+              include: { permission: true },
             },
           },
         },
       },
     });
 
-    const roleNames = userRoles.map((ur) => ur.role.name);
+    // 🔥 CLAVE: usuario sin roles => deny-by-default
+    if (!userRoles.length) {
+      throw new ForbiddenException('User has no roles assigned');
+    }
 
+    const roleNames = userRoles.map((ur) => ur.role.name);
     const permissionKeys = new Set(
       userRoles.flatMap((ur) =>
         ur.role.permissions.map((rp) => rp.permission.key),
       ),
     );
 
-    // Check roles
     if (
       requiredRoles.length &&
       !requiredRoles.some((r) => roleNames.includes(r))
@@ -72,7 +76,6 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Missing required role');
     }
 
-    // Check permissions
     if (
       requiredPermissions.length &&
       !requiredPermissions.every((p) => permissionKeys.has(p))
