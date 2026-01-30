@@ -10,12 +10,12 @@ import {
 
 import type { Request, Response } from 'express'; // 👈 CLAVE
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
 import { RegisterDto } from './dto/register.dto';
 import { randomUUID } from 'crypto';
 import { CsrfGuard } from './guards/csrf.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -47,6 +47,11 @@ export class AuthController {
     return { accessToken: tokens.accessToken };
   }
 
+  @Get('me')
+  me(@CurrentUser() user: { sub: string }) {
+    return this.authService.getSession(user.sub);
+  }
+
   @UseGuards(CsrfGuard)
   @Public()
   @Post('refresh')
@@ -73,16 +78,14 @@ export class AuthController {
 
   @UseGuards(CsrfGuard)
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
-  async logout(@Req() req: any, @Res({ passthrough: true }) res: Response) {
-    await this.authService.logout(req.user.sid);
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
 
-    res.clearCookie('refresh_token', {
-      path: '/',
-    });
+    res.clearCookie('refresh_token');
 
-    return { success: true };
+    return this.authService.logout(refreshToken);
   }
+
   @Public()
   @Get('csrf')
   getCsrf(@Res({ passthrough: true }) res: Response) {
@@ -96,5 +99,35 @@ export class AuthController {
     });
 
     return { ok: true };
+  }
+  // 1️⃣ Forgot password (public)
+  @Public()
+  @Post('forgot-password')
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  // 2️⃣ Reset password (public, token-based)
+  @Public()
+  @Post('reset-password')
+  resetPassword(
+    @Body('token') token: string,
+    @Body('newPassword') newPassword: string,
+  ) {
+    return this.authService.resetPassword(token, newPassword);
+  }
+
+  // 3️⃣ Change password (authenticated)
+  @Post('change-password')
+  changePassword(
+    @CurrentUser() user: { sub: string },
+    @Body('currentPassword') currentPassword: string,
+    @Body('newPassword') newPassword: string,
+  ) {
+    return this.authService.changePassword(
+      user.sub,
+      currentPassword,
+      newPassword,
+    );
   }
 }

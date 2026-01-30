@@ -65,7 +65,7 @@ export class UsersService {
   }
 
   // ➕ CREAR USUARIO (ADMIN)
-  async create(data: { email: string; password: string }) {
+  async create(data: { email: string; password: string; roles: string[] }) {
     const exists = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -74,27 +74,67 @@ export class UsersService {
       throw new ForbiddenException('User already exists');
     }
 
+    if (!data.roles || data.roles.length === 0) {
+      throw new ForbiddenException('At least one role is required');
+    }
+
+    // 1️⃣ Buscar roles válidos
+    const roles = await this.prisma.role.findMany({
+      where: {
+        name: {
+          in: data.roles,
+        },
+      },
+    });
+
+    if (roles.length !== data.roles.length) {
+      throw new ForbiddenException('One or more roles are invalid');
+    }
+
+    // 2️⃣ Crear usuario + asignar roles
     const user = await this.prisma.user.create({
       data: {
         email: data.email,
-        password: data.password, // ⚠️ luego lo hasheás (AuthService)
+        password: data.password, // 🔐 hash en AuthService
         isActive: true,
+        roles: {
+          create: roles.map((role) => ({
+            role: {
+              connect: { id: role.id },
+            },
+          })),
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
       },
     });
 
     return {
       id: user.id,
       email: user.email,
+      roles: user.roles.map((ur) => ur.role.name),
     };
   }
 
   // ✏️ ACTUALIZAR USUARIO
   async update(
     id: string,
-    data: Partial<{ email: string; isActive: boolean }>,
+    data: Partial<{
+      email: string;
+      isActive: boolean;
+      roles: string[];
+    }>,
     requesterId: string,
   ) {
     await this.assertCanAccessUser(id, requesterId);
+
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
@@ -103,15 +143,67 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const updated = await this.prisma.user.update({
+    // 1️⃣ Separar roles del resto del payload
+    const { roles, ...userData } = data;
+
+    // 2️⃣ Actualizar campos simples si existen
+    if (Object.keys(userData).length > 0) {
+      await this.prisma.user.update({
+        where: { id },
+        data: userData,
+      });
+    }
+
+    // 3️⃣ Si vienen roles → reemplazarlos
+    if (roles) {
+      if (roles.length === 0) {
+        throw new ForbiddenException('User must have at least one role');
+      }
+
+      const dbRoles = await this.prisma.role.findMany({
+        where: {
+          name: { in: roles },
+        },
+      });
+
+      if (dbRoles.length !== roles.length) {
+        throw new ForbiddenException('One or more roles are invalid');
+      }
+
+      // limpiar relaciones actuales
+      await this.prisma.userRole.deleteMany({
+        where: { userId: id },
+      });
+
+      // crear nuevas relaciones
+      await this.prisma.userRole.createMany({
+        data: dbRoles.map((role) => ({
+          userId: id,
+          roleId: role.id,
+        })),
+      });
+    }
+
+    // 4️⃣ Devolver estado final consistente
+    const updated = await this.prisma.user.findUnique({
       where: { id },
-      data,
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
 
     return {
-      id: updated.id,
-      email: updated.email,
-      isActive: updated.isActive,
+      id: updated!.id,
+      email: updated!.email,
+      isActive: updated!.isActive,
+      roles: updated!.roles.map((ur) => ur.role.name),
     };
   }
 
