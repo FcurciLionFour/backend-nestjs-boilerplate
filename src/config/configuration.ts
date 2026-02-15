@@ -33,11 +33,20 @@ export default () => ({
     bodyLimit: process.env.HTTP_BODY_LIMIT ?? '1mb',
     urlencodedLimit: process.env.HTTP_URLENCODED_LIMIT ?? '1mb',
   },
+  rateLimit: {
+    redisUrl: process.env.RATE_LIMIT_REDIS_URL,
+  },
+  loginProtection: {
+    enabled: process.env.LOGIN_LOCK_ENABLED !== 'false',
+    redisUrl: process.env.LOGIN_LOCK_REDIS_URL,
+    maxFailures: parseInt(process.env.LOGIN_MAX_FAILURES ?? '5', 10),
+    windowMs: parseInt(process.env.LOGIN_ATTEMPT_WINDOW_MS ?? '900000', 10),
+    baseLockMs: parseInt(process.env.LOGIN_LOCK_BASE_MS ?? '60000', 10),
+    maxLockMs: parseInt(process.env.LOGIN_LOCK_MAX_MS ?? '1800000', 10),
+  },
   swagger: {
-    enabled:
-      process.env.SWAGGER_ENABLED === 'true' ||
-      (process.env.SWAGGER_ENABLED !== 'false' &&
-        process.env.NODE_ENV !== 'production'),
+    enabled: process.env.SWAGGER_ENABLED === 'true',
+    allowInProduction: process.env.SWAGGER_ALLOW_IN_PRODUCTION === 'true',
     path: process.env.SWAGGER_PATH ?? 'docs',
   },
 });

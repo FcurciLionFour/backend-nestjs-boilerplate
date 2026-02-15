@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RateLimitGuard } from 'src/common/guards/rate-limit.guard';
+import { LoginAttemptService } from './login-attempt.service';
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { RateLimitGuard } from 'src/common/guards/rate-limit.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RateLimitGuard],
+  providers: [AuthService, JwtStrategy, RateLimitGuard, LoginAttemptService],
 })
 export class AuthModule {}

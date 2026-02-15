@@ -8,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
+import { LoginAttemptService } from './login-attempt.service';
+import { ErrorCodes } from 'src/common/errors/error-codes';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +17,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private loginAttemptService: LoginAttemptService,
   ) {}
 
   /* ---------------- REGISTER / LOGIN ---------------- */
@@ -40,16 +43,31 @@ export class AuthService {
   }
 
   async login(email: string, password: string, meta?: SessionMeta) {
+    const ip = meta?.ip;
+    await this.loginAttemptService.assertNotLocked(email, ip);
+
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Invalid credentials');
+      await this.loginAttemptService.recordFailure(email, ip);
+      await this.loginAttemptService.assertNotLocked(email, ip);
+      throw new UnauthorizedException({
+        code: ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        message: 'Invalid credentials',
+      });
     }
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid credentials');
+      await this.loginAttemptService.recordFailure(email, ip);
+      await this.loginAttemptService.assertNotLocked(email, ip);
+      throw new UnauthorizedException({
+        code: ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        message: 'Invalid credentials',
+      });
     }
+
+    await this.loginAttemptService.recordSuccess(email, ip);
 
     return this.createSession(user.id, meta);
   }
@@ -64,7 +82,10 @@ export class AuthService {
         secret: this.config.getOrThrow<string>('jwt.refreshSecret'),
       });
     } catch {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
     }
 
     const session = await this.prisma.authSession.findUnique({
@@ -82,7 +103,10 @@ export class AuthService {
       session.revokedAt ||
       session.expiresAt < new Date()
     ) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
     }
 
     const valid = await bcrypt.compare(
@@ -97,7 +121,10 @@ export class AuthService {
         data: { revokedAt: new Date() },
       });
 
-      throw new ForbiddenException('Refresh token reuse detected');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_REFRESH_REUSE_DETECTED,
+        message: 'Refresh token reuse detected',
+      });
     }
 
     // rotación
@@ -206,7 +233,10 @@ export class AuthService {
       },
     });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException({
+        code: ErrorCodes.AUTH_USER_INACTIVE,
+        message: 'Unauthorized',
+      });
     }
 
     const roles = await this.prisma.userRole.findMany({
@@ -271,7 +301,10 @@ export class AuthService {
     });
 
     if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
-      throw new ForbiddenException('Invalid or expired token');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_INVALID_OR_EXPIRED_RESET_TOKEN,
+        message: 'Invalid or expired token',
+      });
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
@@ -307,12 +340,18 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new ForbiddenException();
+      throw new ForbiddenException({
+        code: ErrorCodes.ACCESS_DENIED,
+        message: 'Forbidden',
+      });
     }
 
     const valid = await bcrypt.compare(currentPassword, user.password);
     if (!valid) {
-      throw new ForbiddenException('Invalid current password');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_INVALID_CURRENT_PASSWORD,
+        message: 'Invalid current password',
+      });
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);

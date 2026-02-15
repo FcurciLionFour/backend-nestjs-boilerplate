@@ -1,5 +1,6 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ErrorCodes } from 'src/common/errors/error-codes';
 
 @Injectable()
 export class HealthService {
@@ -25,7 +26,7 @@ export class HealthService {
       };
     } catch {
       throw new ServiceUnavailableException({
-        code: 'DB_UNAVAILABLE',
+        code: ErrorCodes.DB_UNAVAILABLE,
         message: 'Database is unavailable',
       });
     }

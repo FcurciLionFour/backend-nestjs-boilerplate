@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { ErrorCodes } from 'src/common/errors/error-codes';
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
@@ -32,7 +33,10 @@ export class CsrfGuard implements CanActivate {
           path: req.originalUrl ?? req.url,
         }),
       );
-      throw new ForbiddenException('CSRF token missing');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_CSRF_TOKEN_MISSING,
+        message: 'CSRF token missing',
+      });
     }
 
     const headerValue =
@@ -50,7 +54,10 @@ export class CsrfGuard implements CanActivate {
           path: req.originalUrl ?? req.url,
         }),
       );
-      throw new ForbiddenException('Invalid CSRF token');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_CSRF_TOKEN_INVALID,
+        message: 'Invalid CSRF token',
+      });
     }
 
     return true;

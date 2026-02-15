@@ -11,11 +11,14 @@ import type { Request, Response } from 'express';
 interface ErrorBody {
   statusCode: number;
   code: string;
+  errorCode: string;
+  error_code: string;
   message: string;
   path: string;
   timestamp: string;
   requestId?: string;
   errors?: string[];
+  retryAfterSeconds?: number;
 }
 
 @Catch()
@@ -34,6 +37,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let code = 'INTERNAL_SERVER_ERROR';
     let message = 'Internal server error';
     let errors: string[] | undefined;
+    let retryAfterSeconds: number | undefined;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -57,11 +61,38 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }
 
         const responseCode = (response as { code?: unknown }).code;
+        const responseErrorCode = (response as { errorCode?: unknown })
+          .errorCode;
+        const responseSnakeErrorCode = (response as { error_code?: unknown })
+          .error_code;
         if (
           typeof responseCode === 'string' &&
           responseCode.trim().length > 0
         ) {
           code = responseCode;
+        } else if (
+          typeof responseErrorCode === 'string' &&
+          responseErrorCode.trim().length > 0
+        ) {
+          code = responseErrorCode;
+        } else if (
+          typeof responseSnakeErrorCode === 'string' &&
+          responseSnakeErrorCode.trim().length > 0
+        ) {
+          code = responseSnakeErrorCode;
+        }
+
+        const responseRetryAfterSeconds = (
+          response as {
+            retryAfterSeconds?: unknown;
+          }
+        ).retryAfterSeconds;
+        if (
+          typeof responseRetryAfterSeconds === 'number' &&
+          Number.isFinite(responseRetryAfterSeconds) &&
+          responseRetryAfterSeconds > 0
+        ) {
+          retryAfterSeconds = Math.ceil(responseRetryAfterSeconds);
         }
       }
     } else if (exception instanceof Error) {
@@ -71,6 +102,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const body: ErrorBody = {
       statusCode,
       code,
+      errorCode: code,
+      error_code: code,
       message,
       path,
       timestamp: new Date().toISOString(),
@@ -79,6 +112,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (errors && errors.length > 0) {
       body.errors = errors;
+    }
+
+    if (retryAfterSeconds !== undefined) {
+      body.retryAfterSeconds = retryAfterSeconds;
+      res.setHeader('Retry-After', retryAfterSeconds.toString());
     }
 
     res.status(statusCode).json(body);

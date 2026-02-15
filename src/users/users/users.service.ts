@@ -8,6 +8,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
+import { ErrorCodes } from 'src/common/errors/error-codes';
 
 @Injectable()
 export class UsersService {
@@ -57,7 +58,10 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException({
+        code: ErrorCodes.USER_NOT_FOUND,
+        message: 'User not found',
+      });
     }
 
     return {
@@ -74,11 +78,17 @@ export class UsersService {
     });
 
     if (exists) {
-      throw new ForbiddenException('User already exists');
+      throw new ForbiddenException({
+        code: ErrorCodes.USER_ALREADY_EXISTS,
+        message: 'User already exists',
+      });
     }
 
     if (!data.roles || data.roles.length === 0) {
-      throw new ForbiddenException('At least one role is required');
+      throw new ForbiddenException({
+        code: ErrorCodes.USER_ROLE_REQUIRED,
+        message: 'At least one role is required',
+      });
     }
 
     // 1️⃣ Buscar roles válidos
@@ -91,7 +101,10 @@ export class UsersService {
     });
 
     if (roles.length !== data.roles.length) {
-      throw new ForbiddenException('One or more roles are invalid');
+      throw new ForbiddenException({
+        code: ErrorCodes.USER_INVALID_ROLE,
+        message: 'One or more roles are invalid',
+      });
     }
 
     // 2️⃣ Crear usuario + asignar roles
@@ -138,7 +151,10 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException({
+        code: ErrorCodes.USER_NOT_FOUND,
+        message: 'User not found',
+      });
     }
 
     // 1️⃣ Separar roles del resto del payload
@@ -155,7 +171,10 @@ export class UsersService {
     // 3️⃣ Si vienen roles → reemplazarlos
     if (roles) {
       if (roles.length === 0) {
-        throw new ForbiddenException('User must have at least one role');
+        throw new ForbiddenException({
+          code: ErrorCodes.USER_ROLE_REQUIRED,
+          message: 'User must have at least one role',
+        });
       }
 
       const dbRoles = await this.prisma.role.findMany({
@@ -165,7 +184,10 @@ export class UsersService {
       });
 
       if (dbRoles.length !== roles.length) {
-        throw new ForbiddenException('One or more roles are invalid');
+        throw new ForbiddenException({
+          code: ErrorCodes.USER_INVALID_ROLE,
+          message: 'One or more roles are invalid',
+        });
       }
 
       // limpiar relaciones actuales
@@ -213,7 +235,10 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException({
+        code: ErrorCodes.USER_NOT_FOUND,
+        message: 'User not found',
+      });
     }
 
     await this.prisma.user.update({
@@ -249,6 +274,9 @@ export class UsersService {
     }
 
     // 3️⃣ Caso contrario → forbidden
-    throw new ForbiddenException('Access denied');
+    throw new ForbiddenException({
+      code: ErrorCodes.ACCESS_DENIED,
+      message: 'Access denied',
+    });
   }
 }

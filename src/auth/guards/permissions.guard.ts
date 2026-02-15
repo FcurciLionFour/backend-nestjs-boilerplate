@@ -10,6 +10,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { ErrorCodes } from 'src/common/errors/error-codes';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -41,7 +42,10 @@ export class PermissionsGuard implements CanActivate {
     // 🔥 CLAVE: si se requiere algo y no hay usuario => 401
     const userId = req.user?.sub;
     if (!userId) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
     }
 
     const user = await this.prisma.user.findUnique({
@@ -49,7 +53,10 @@ export class PermissionsGuard implements CanActivate {
       select: { isActive: true },
     });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('User is inactive');
+      throw new UnauthorizedException({
+        code: ErrorCodes.AUTH_USER_INACTIVE,
+        message: 'User is inactive',
+      });
     }
 
     // Traemos roles + permisos del usuario
@@ -68,7 +75,10 @@ export class PermissionsGuard implements CanActivate {
 
     // 🔥 CLAVE: usuario sin roles => deny-by-default
     if (!userRoles.length) {
-      throw new ForbiddenException('User has no roles assigned');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_USER_HAS_NO_ROLES,
+        message: 'User has no roles assigned',
+      });
     }
 
     const roleNames = userRoles.map((ur) => ur.role.name);
@@ -82,14 +92,20 @@ export class PermissionsGuard implements CanActivate {
       requiredRoles.length &&
       !requiredRoles.some((r) => roleNames.includes(r))
     ) {
-      throw new ForbiddenException('Missing required role');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_MISSING_REQUIRED_ROLE,
+        message: 'Missing required role',
+      });
     }
 
     if (
       requiredPermissions.length &&
       !requiredPermissions.every((p) => permissionKeys.has(p))
     ) {
-      throw new ForbiddenException('Missing required permission');
+      throw new ForbiddenException({
+        code: ErrorCodes.AUTH_MISSING_REQUIRED_PERMISSION,
+        message: 'Missing required permission',
+      });
     }
 
     return true;

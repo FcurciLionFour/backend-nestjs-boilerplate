@@ -5,13 +5,16 @@ import {
   Injectable,
   Logger,
   NestInterceptor,
+  Optional,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { tap } from 'rxjs/operators';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RequestLoggingInterceptor.name);
+  constructor(@Optional() private readonly metricsService?: MetricsService) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
     if (context.getType() !== 'http') {
@@ -30,6 +33,14 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () => {
+          const durationMs = Date.now() - startedAt;
+          this.metricsService?.recordHttpRequest({
+            method,
+            path,
+            statusCode: res.statusCode,
+            durationMs,
+          });
+
           this.logger.log(
             JSON.stringify({
               event: 'http_request',
@@ -38,7 +49,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               method,
               path,
               statusCode: res.statusCode,
-              durationMs: Date.now() - startedAt,
+              durationMs,
               ip,
               userAgent,
             }),
@@ -47,6 +58,13 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         error: (error: unknown) => {
           const statusCode =
             error instanceof HttpException ? error.getStatus() : 500;
+          const durationMs = Date.now() - startedAt;
+          this.metricsService?.recordHttpRequest({
+            method,
+            path,
+            statusCode,
+            durationMs,
+          });
 
           this.logger.error(
             JSON.stringify({
@@ -56,7 +74,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               method,
               path,
               statusCode,
-              durationMs: Date.now() - startedAt,
+              durationMs,
               ip,
               userAgent,
               error:

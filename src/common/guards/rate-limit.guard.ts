@@ -4,6 +4,10 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
@@ -11,23 +15,93 @@ import {
   RATE_LIMIT_OPTIONS_KEY,
   type RateLimitOptions,
 } from '../decorators/rate-limit.decorator';
+import { ConfigService } from '@nestjs/config';
+import { ErrorCodes } from '../errors/error-codes';
 
 interface CounterEntry {
   count: number;
   resetAt: number;
 }
 
+interface RateLimitIncrementResult {
+  count: number;
+  resetAt: number;
+}
+
 @Injectable()
-export class RateLimitGuard implements CanActivate {
+export class RateLimitGuard
+  implements CanActivate, OnModuleInit, OnModuleDestroy
+{
   private static readonly counters = new Map<string, CounterEntry>();
+  private readonly logger = new Logger(RateLimitGuard.name);
+  private redisClient: null | {
+    eval: (script: string, options: unknown) => Promise<[number, number]>;
+    connect: () => Promise<void>;
+    quit: () => Promise<void>;
+  } = null;
+  private redisEnabled = false;
 
   static resetForTests(): void {
     RateLimitGuard.counters.clear();
   }
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    @Optional() private readonly configService?: ConfigService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async onModuleInit(): Promise<void> {
+    const redisUrl =
+      this.configService?.get<string>('rateLimit.redisUrl') ??
+      process.env.RATE_LIMIT_REDIS_URL;
+
+    if (!redisUrl) {
+      return;
+    }
+
+    try {
+      const redisPackage = process.env.RATE_LIMIT_REDIS_PACKAGE ?? 'redis';
+      const redis = (await import(redisPackage)) as {
+        createClient: (opts: { url: string }) => {
+          connect: () => Promise<void>;
+          quit: () => Promise<void>;
+          eval: (
+            script: string,
+            options: {
+              keys: string[];
+              arguments: string[];
+            },
+          ) => Promise<[number, number]>;
+        };
+      };
+
+      const client = redis.createClient({ url: redisUrl });
+      await client.connect();
+      this.redisClient = client;
+      this.redisEnabled = true;
+      this.logger.log('Rate limit store initialized with Redis');
+    } catch (error) {
+      this.redisClient = null;
+      this.redisEnabled = false;
+      const reason =
+        error instanceof Error ? error.message : 'Unknown Redis error';
+      this.logger.warn(
+        `Redis rate limit disabled; using in-memory fallback. Reason: ${reason}`,
+      );
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (!this.redisClient) {
+      return;
+    }
+
+    await this.redisClient.quit();
+    this.redisClient = null;
+    this.redisEnabled = false;
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const options =
       this.reflector.getAllAndOverride<RateLimitOptions>(
         RATE_LIMIT_OPTIONS_KEY,
@@ -45,34 +119,77 @@ export class RateLimitGuard implements CanActivate {
     const route = req.originalUrl ?? req.url ?? context.getHandler().name;
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const key = `${ip}:${req.method}:${route}`;
+    const incrementResult = await this.incrementCounter(key, options.windowMs);
+    const remaining = Math.max(0, options.limit - incrementResult.count);
 
-    const existing = RateLimitGuard.counters.get(key);
-    if (!existing || existing.resetAt <= now) {
-      RateLimitGuard.counters.set(key, {
-        count: 1,
-        resetAt: now + options.windowMs,
-      });
-      this.setHeaders(res, options, options.limit - 1, options.windowMs);
-      return true;
-    }
-
-    if (existing.count >= options.limit) {
+    if (incrementResult.count > options.limit) {
       const retryAfterSeconds = Math.max(
         1,
-        Math.ceil((existing.resetAt - now) / 1000),
+        Math.ceil((incrementResult.resetAt - now) / 1000),
       );
-      this.setHeaders(res, options, 0, existing.resetAt - now);
+      this.setHeaders(res, options, remaining, incrementResult.resetAt - now);
       res.setHeader('Retry-After', retryAfterSeconds.toString());
       throw new HttpException(
-        'Too many requests',
+        {
+          code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+          message: 'Too many requests',
+          retryAfterSeconds,
+        },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
-    existing.count += 1;
-    const remaining = Math.max(0, options.limit - existing.count);
-    this.setHeaders(res, options, remaining, existing.resetAt - now);
+    this.setHeaders(res, options, remaining, incrementResult.resetAt - now);
     return true;
+  }
+
+  private async incrementCounter(
+    key: string,
+    windowMs: number,
+  ): Promise<RateLimitIncrementResult> {
+    if (this.redisEnabled && this.redisClient) {
+      try {
+        const script = [
+          'local c = redis.call("INCR", KEYS[1])',
+          'if c == 1 then redis.call("PEXPIRE", KEYS[1], ARGV[1]) end',
+          'local ttl = redis.call("PTTL", KEYS[1])',
+          'return {c, ttl}',
+        ].join('\n');
+
+        const [count, ttl] = await this.redisClient.eval(script, {
+          keys: [`rl:${key}`],
+          arguments: [windowMs.toString()],
+        });
+
+        const ttlMs = ttl > 0 ? ttl : windowMs;
+        return {
+          count,
+          resetAt: Date.now() + ttlMs,
+        };
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : 'Unknown Redis error';
+        this.logger.error(
+          `Redis rate limit failed; switching to in-memory fallback. Reason: ${reason}`,
+        );
+        this.redisEnabled = false;
+      }
+    }
+
+    const now = Date.now();
+    const existing = RateLimitGuard.counters.get(key);
+
+    if (!existing || existing.resetAt <= now) {
+      const entry = {
+        count: 1,
+        resetAt: now + windowMs,
+      };
+      RateLimitGuard.counters.set(key, entry);
+      return entry;
+    }
+
+    existing.count += 1;
+    return existing;
   }
 
   private setHeaders(

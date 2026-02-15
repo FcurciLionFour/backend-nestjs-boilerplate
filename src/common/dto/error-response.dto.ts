@@ -7,6 +7,12 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 'UNAUTHORIZED' })
   code: string;
 
+  @ApiProperty({ example: 'UNAUTHORIZED' })
+  errorCode: string;
+
+  @ApiProperty({ example: 'UNAUTHORIZED' })
+  error_code: string;
+
   @ApiProperty({ example: 'Invalid token' })
   message: string;
 
@@ -18,6 +24,9 @@ export class ErrorResponseDto {
 
   @ApiProperty({ example: '9e399153-2df5-4f70-9d00-4f7875b746f5' })
   requestId?: string;
+
+  @ApiProperty({ example: 60, required: false })
+  retryAfterSeconds?: number;
 }
 
 export class ValidationErrorResponseDto extends ErrorResponseDto {

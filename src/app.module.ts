@@ -15,6 +15,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
+import { MetricsService } from './common/metrics/metrics.service';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { HealthService } from './health/health.service';
     AppService,
     AuditService,
     HealthService,
+    MetricsService,
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,

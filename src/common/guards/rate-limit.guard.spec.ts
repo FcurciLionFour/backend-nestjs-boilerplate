@@ -1,8 +1,4 @@
-import {
-  HttpException,
-  type ExecutionContext,
-  type HttpArgumentsHost,
-} from '@nestjs/common';
+import { type ExecutionContext, type HttpArgumentsHost } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
 import { RateLimitGuard } from './rate-limit.guard';
@@ -35,7 +31,7 @@ describe('RateLimitGuard', () => {
     RateLimitGuard.resetForTests();
   });
 
-  it('allows request when no rate limit metadata is present', () => {
+  it('allows request when no rate limit metadata is present', async () => {
     (reflectorMock.getAllAndOverride as jest.Mock).mockReturnValue(undefined);
     const guard = new RateLimitGuard(reflectorMock);
 
@@ -48,11 +44,11 @@ describe('RateLimitGuard', () => {
     const res = { setHeader } as Partial<Response>;
     const context = buildContext(req, res);
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(setHeader).not.toHaveBeenCalled();
   });
 
-  it('sets rate limit headers for first request in a window', () => {
+  it('sets rate limit headers for first request in a window', async () => {
     (reflectorMock.getAllAndOverride as jest.Mock).mockReturnValue({
       limit: 2,
       windowMs: 60000,
@@ -70,12 +66,12 @@ describe('RateLimitGuard', () => {
     const res = { setHeader } as unknown as Response;
     const context = buildContext(req, res);
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', '2');
     expect(setHeader).toHaveBeenCalledWith('X-RateLimit-Remaining', '1');
   });
 
-  it('throws 429 when request count exceeds limit', () => {
+  it('throws 429 when request count exceeds limit', async () => {
     (reflectorMock.getAllAndOverride as jest.Mock).mockReturnValue({
       limit: 1,
       windowMs: 60000,
@@ -93,15 +89,11 @@ describe('RateLimitGuard', () => {
     const res = { setHeader } as unknown as Response;
     const context = buildContext(req, res);
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
 
-    try {
-      guard.canActivate(context);
-      fail('Expected HttpException to be thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(HttpException);
-      expect((err as HttpException).getStatus()).toBe(429);
-    }
+    await expect(guard.canActivate(context)).rejects.toMatchObject({
+      status: 429,
+    });
 
     expect(setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
   });

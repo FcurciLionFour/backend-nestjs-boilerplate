@@ -378,6 +378,13 @@ describe('Auth Security (e2e)', () => {
                 csrfMaxAgeMs: 7200000,
                 refreshMaxAgeMs: 604800000,
               },
+              loginProtection: {
+                enabled: true,
+                maxFailures: 5,
+                windowMs: 900000,
+                baseLockMs: 60000,
+                maxLockMs: 1800000,
+              },
             }),
           ],
         }),
@@ -497,20 +504,23 @@ describe('Auth Security (e2e)', () => {
       .expect(401);
   });
 
-  it('enforces login rate limit with 429 responses', async () => {
+  it('enforces login lockout after repeated credential failures', async () => {
     const agent = request.agent(app.getHttpServer());
 
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       await agent
         .post('/auth/login')
         .send({ email: 'no-user@test.com', password: 'WrongPass123' })
         .expect(401);
     }
 
-    await agent
+    const lockedResponse = await agent
       .post('/auth/login')
       .send({ email: 'no-user@test.com', password: 'WrongPass123' })
       .expect(429);
+
+    expect(lockedResponse.body.code).toBe('AUTH_LOGIN_LOCKED');
+    expect(typeof lockedResponse.body.retryAfterSeconds).toBe('number');
   });
 
   it('denies RBAC endpoint without JWT', async () => {

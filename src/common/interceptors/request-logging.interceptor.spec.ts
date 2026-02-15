@@ -2,10 +2,15 @@ import { HttpException } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { RequestLoggingInterceptor } from './request-logging.interceptor';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('RequestLoggingInterceptor', () => {
   it('passes through non-http context', (done) => {
-    const interceptor = new RequestLoggingInterceptor();
+    const recordHttpRequestMock = jest.fn();
+    const metricsService = {
+      recordHttpRequest: recordHttpRequestMock,
+    } as unknown as MetricsService;
+    const interceptor = new RequestLoggingInterceptor(metricsService);
     const next: CallHandler = {
       handle: () => of('ok'),
     };
@@ -23,7 +28,11 @@ describe('RequestLoggingInterceptor', () => {
   });
 
   it('logs successful http requests', (done) => {
-    const interceptor = new RequestLoggingInterceptor();
+    const recordHttpRequestMock = jest.fn();
+    const metricsService = {
+      recordHttpRequest: recordHttpRequestMock,
+    } as unknown as MetricsService;
+    const interceptor = new RequestLoggingInterceptor(metricsService);
     const logger = (
       interceptor as unknown as {
         logger: { log: jest.Mock; error: jest.Mock };
@@ -53,6 +62,13 @@ describe('RequestLoggingInterceptor', () => {
     interceptor.intercept(context, next).subscribe({
       next: () => {
         expect(logger.log).toHaveBeenCalled();
+        expect(recordHttpRequestMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            method: 'GET',
+            path: '/health',
+            statusCode: 200,
+          }),
+        );
         done();
       },
       error: done,
@@ -60,7 +76,11 @@ describe('RequestLoggingInterceptor', () => {
   });
 
   it('logs failed http requests', (done) => {
-    const interceptor = new RequestLoggingInterceptor();
+    const recordHttpRequestMock = jest.fn();
+    const metricsService = {
+      recordHttpRequest: recordHttpRequestMock,
+    } as unknown as MetricsService;
+    const interceptor = new RequestLoggingInterceptor(metricsService);
     const logger = (
       interceptor as unknown as {
         logger: { log: jest.Mock; error: jest.Mock };
@@ -93,6 +113,13 @@ describe('RequestLoggingInterceptor', () => {
       },
       error: () => {
         expect(logger.error).toHaveBeenCalled();
+        expect(recordHttpRequestMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            method: 'POST',
+            path: '/auth/login',
+            statusCode: 401,
+          }),
+        );
         done();
       },
     });

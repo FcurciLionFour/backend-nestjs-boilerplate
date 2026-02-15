@@ -9,7 +9,16 @@ import { json, urlencoded } from 'express';
 import { randomUUID } from 'crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-async function bootstrap() {
+export function shouldSetupSwagger(config: ConfigService): boolean {
+  const swaggerEnabled = config.get<boolean>('swagger.enabled') === true;
+  const isProduction = config.get<string>('nodeEnv') === 'production';
+  const allowInProduction =
+    config.get<boolean>('swagger.allowInProduction') === true;
+
+  return swaggerEnabled && (!isProduction || allowInProduction);
+}
+
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const expressApp = app.getHttpAdapter().getInstance() as {
@@ -56,8 +65,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swaggerEnabled = config.get<boolean>('swagger.enabled') ?? false;
-  if (swaggerEnabled) {
+  if (shouldSetupSwagger(config)) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Backend NestJS Boilerplate API')
       .setDescription('API documentation for the NestJS SaaS boilerplate')
@@ -76,4 +84,7 @@ async function bootstrap() {
   const port = config.get<number>('port') || 3000;
   await app.listen(port);
 }
-void bootstrap();
+
+if (process.env.NODE_ENV !== 'test') {
+  void bootstrap();
+}

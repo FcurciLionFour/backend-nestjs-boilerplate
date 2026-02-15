@@ -29,7 +29,10 @@ cp .env.example .env
 - `JWT_REFRESH_SECRET` (>= 32 chars)
 - `CORS_ORIGINS`
 - `COOKIE_SAME_SITE` y `COOKIE_SECURE`
-- `SWAGGER_ENABLED=true` (recomendado en local)
+- `SWAGGER_ENABLED=true` (opcional en local)
+- `SWAGGER_ALLOW_IN_PRODUCTION=true` (solo si queres exponer docs en prod)
+- `RATE_LIMIT_REDIS_URL` (recomendado para rate-limit distribuido en multi-instancia)
+- `LOGIN_LOCK_ENABLED`, `LOGIN_LOCK_REDIS_URL`, `LOGIN_MAX_FAILURES`, `LOGIN_ATTEMPT_WINDOW_MS`, `LOGIN_LOCK_BASE_MS`, `LOGIN_LOCK_MAX_MS` para lockout progresivo por `ip+email`
 
 4. Ejecutar migraciones y seed:
 
@@ -93,8 +96,11 @@ El paso de cobertura falla automaticamente si cae por debajo de los umbrales def
 - Proteccion CSRF para endpoints sensibles (refresh/logout).
 - Autorizacion por roles/permisos (RBAC).
 - Rate-limit configurable por endpoint.
+- Rate-limit con fallback en memoria y soporte Redis opcional (`RATE_LIMIT_REDIS_URL`).
+- Lockout progresivo de login por `ip+email` con backoff exponencial y `429` (`LOGIN_LOCKED`), con Redis opcional para multi-instancia.
 - Endpoints de operacion: `GET /health` y `GET /ready`.
-- OpenAPI/Swagger habilitable por `SWAGGER_ENABLED` en `SWAGGER_PATH` (default `/docs`).
+- Endpoint de metricas Prometheus: `GET /metrics`.
+- OpenAPI/Swagger deshabilitado por defecto; requiere `SWAGGER_ENABLED=true` y en produccion tambien `SWAGGER_ALLOW_IN_PRODUCTION=true`.
 
 ## Documentacion operativa
 
@@ -105,5 +111,7 @@ El paso de cobertura falla automaticamente si cae por debajo de los umbrales def
 - Versionado y releases: `docs/VERSIONING.md`
 - Template de modulo feature: `docs/FEATURE_MODULE_TEMPLATE.md`
 - Seguridad y auth: `docs/AUTH_AND_SECURITY.md`
+- Catalogo de errores de dominio: `docs/ERROR_CODES.md`
+- Governance de repositorio (branch protection + checks): `docs/REPO_GOVERNANCE.md`
 - Arquitectura: `docs/ARCHITECTURE.md`
 - Plan de pruebas backend: `docs/BACKEND_TEST_PLAN.md`

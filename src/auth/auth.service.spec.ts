@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoginAttemptService } from './login-attempt.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -47,6 +48,12 @@ describe('AuthService', () => {
     }),
   } as any;
 
+  const loginAttemptMock = {
+    assertNotLocked: jest.fn(),
+    recordSuccess: jest.fn(),
+    recordFailure: jest.fn(),
+  } as any;
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -61,6 +68,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: JwtService, useValue: jwtMock },
         { provide: ConfigService, useValue: configMock },
+        { provide: LoginAttemptService, useValue: loginAttemptMock },
       ],
     }).compile();
 
@@ -91,6 +99,7 @@ describe('AuthService', () => {
     await expect(service.login('missing@test.com', 'x')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+    expect(loginAttemptMock.recordFailure).toHaveBeenCalledTimes(1);
   });
 
   it('login succeeds with valid credentials', async () => {
@@ -106,6 +115,7 @@ describe('AuthService', () => {
 
     expect(result.accessToken).toBeTruthy();
     expect(prismaMock.authSession.create).toHaveBeenCalledTimes(1);
+    expect(loginAttemptMock.recordSuccess).toHaveBeenCalledTimes(1);
   });
 
   it('refresh throws unauthorized when token verify fails', async () => {

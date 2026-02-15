@@ -1,7 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from 'src/auth/decorators/public.decorator';
 import { HealthService } from './health.service';
 import {
+  ApiExcludeEndpoint,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
@@ -12,11 +13,15 @@ import {
   HealthResponseDto,
   ReadinessResponseDto,
 } from './dto/health-response.dto';
+import { MetricsService } from 'src/common/metrics/metrics.service';
 
 @ApiTags('Health')
 @Controller()
 export class HealthController {
-  constructor(private readonly healthService: HealthService) {}
+  constructor(
+    private readonly healthService: HealthService,
+    private readonly metricsService: MetricsService,
+  ) {}
 
   @Public()
   @Get('health')
@@ -33,5 +38,13 @@ export class HealthController {
   @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
   getReadiness() {
     return this.healthService.getReadiness();
+  }
+
+  @Public()
+  @Get('metrics')
+  @Header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+  @ApiExcludeEndpoint()
+  getMetrics() {
+    return this.metricsService.renderPrometheus();
   }
 }
