@@ -14,6 +14,19 @@ import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import { RequirePermissions } from 'src/auth/decorators/permissions.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { JwtGlobalGuard } from 'src/auth/guards/jwt-global.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+
+interface CreateUserBody {
+  email: string;
+  password: string;
+  roles: string[];
+}
+
+interface UpdateUserBody {
+  email?: string;
+  isActive?: boolean;
+  roles?: string[];
+}
 
 interface CreateUserBody {
   email: string;
@@ -33,6 +46,7 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @RequirePermissions('users.read')
+  @Roles('ADMIN')
   @Get()
   @UseGuards(PermissionsGuard)
   findAll(): Promise<UserResponseDto[]> {
