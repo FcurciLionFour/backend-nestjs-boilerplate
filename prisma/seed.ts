@@ -3,7 +3,6 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1) Roles
   const adminRole = await prisma.role.upsert({
     where: { name: 'ADMIN' },
     update: {},
@@ -22,7 +21,6 @@ async function main() {
     },
   });
 
-  // 2) Permissions
   const usersRead = await prisma.permission.upsert({
     where: { key: 'users.read' },
     update: {},
@@ -41,7 +39,6 @@ async function main() {
     },
   });
 
-  // 3) Role ↔ Permission
   await prisma.rolePermission.upsert({
     where: {
       roleId_permissionId: {
@@ -70,8 +67,7 @@ async function main() {
     },
   });
 
-  // USER no debe poder listar usuarios en endpoints administrativos.
-  // Esto también corrige instalaciones existentes eliminando la relación previa.
+  // Keep USER role with least privilege by default.
   await prisma.rolePermission.deleteMany({
     where: {
       roleId: userRole.id,
@@ -79,16 +75,22 @@ async function main() {
     },
   });
 
-  // 4) Asignar ADMIN a usuario test
-  const TEST_EMAIL = 'test@test.com'; // ⬅️ AJUSTÁ SI HACE FALTA
+  const seedAdminEmail = process.env.SEED_ADMIN_EMAIL;
+  if (!seedAdminEmail) {
+    console.log(
+      'SEED_ADMIN_EMAIL not set, skipping automatic ADMIN role assignment.',
+    );
+    return;
+  }
 
   const user = await prisma.user.findUnique({
-    where: { email: TEST_EMAIL },
+    where: { email: seedAdminEmail },
   });
 
   if (!user) {
-    console.warn(`
-        ⚠️ Usuario ${TEST_EMAIL} no existe. Saltando asignación de rol.`);
+    console.warn(
+      `SEED_ADMIN_EMAIL=${seedAdminEmail} does not exist. Skipping ADMIN role assignment.`,
+    );
     return;
   }
 
@@ -106,12 +108,12 @@ async function main() {
     },
   });
 
-  console.log('✅ Seed RBAC completado');
+  console.log(`Assigned ADMIN role to ${seedAdminEmail}.`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
+  .catch((error: unknown) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {

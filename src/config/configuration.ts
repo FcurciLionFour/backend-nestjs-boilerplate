@@ -14,13 +14,30 @@ export default () => ({
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
     refreshSecret: process.env.JWT_REFRESH_SECRET,
-    accessExpiresIn: '15m',
-    refreshExpiresIn: '7d',
+    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
   },
   cookies: {
     sameSite: process.env.COOKIE_SAME_SITE,
     secure:
       process.env.COOKIE_SECURE === 'true' ||
       process.env.NODE_ENV === 'production',
+    csrfMaxAgeMs: parseInt(process.env.COOKIE_CSRF_MAX_AGE_MS ?? '7200000', 10),
+    refreshMaxAgeMs: parseInt(
+      process.env.COOKIE_REFRESH_MAX_AGE_MS ?? '604800000',
+      10,
+    ),
+  },
+  http: {
+    trustProxy: process.env.TRUST_PROXY === 'true',
+    bodyLimit: process.env.HTTP_BODY_LIMIT ?? '1mb',
+    urlencodedLimit: process.env.HTTP_URLENCODED_LIMIT ?? '1mb',
+  },
+  swagger: {
+    enabled:
+      process.env.SWAGGER_ENABLED === 'true' ||
+      (process.env.SWAGGER_ENABLED !== 'false' &&
+        process.env.NODE_ENV !== 'production'),
+    path: process.env.SWAGGER_PATH ?? 'docs',
   },
 });

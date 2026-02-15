@@ -5,7 +5,7 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { tap } from 'rxjs/operators';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AuditService } from './audit.service';
 
 @Injectable()
@@ -14,6 +14,7 @@ export class AuditInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler) {
     const req = context.switchToHttp().getRequest<Request>();
+    const res = context.switchToHttp().getResponse<Response>();
 
     const method = req.method;
     const path = req.originalUrl ?? req.url;
@@ -28,11 +29,12 @@ export class AuditInterceptor implements NestInterceptor {
     const userAgent = req.headers['user-agent'];
     const requestIdHeader = req.headers['x-request-id'];
     const requestId =
-      typeof requestIdHeader === 'string'
+      req.requestId ??
+      (typeof requestIdHeader === 'string'
         ? requestIdHeader
         : Array.isArray(requestIdHeader)
           ? requestIdHeader[0]
-          : undefined;
+          : undefined);
 
     return next.handle().pipe(
       tap({
@@ -44,7 +46,7 @@ export class AuditInterceptor implements NestInterceptor {
             path,
             ip,
             userAgent,
-            statusCode: 200,
+            statusCode: res.statusCode,
             requestId,
           });
         },

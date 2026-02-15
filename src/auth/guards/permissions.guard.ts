@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
@@ -18,7 +19,7 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<any>();
+    const req = context.switchToHttp().getRequest<Request>();
 
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
@@ -41,6 +42,14 @@ export class PermissionsGuard implements CanActivate {
     const userId = req.user?.sub;
     if (!userId) {
       throw new UnauthorizedException();
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isActive: true },
+    });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User is inactive');
     }
 
     // Traemos roles + permisos del usuario

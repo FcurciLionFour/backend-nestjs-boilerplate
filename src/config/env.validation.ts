@@ -12,9 +12,21 @@ export const envValidationSchema = Joi.object({
 
   COOKIE_SAME_SITE: Joi.string().valid('lax', 'strict', 'none').default('lax'),
   COOKIE_SECURE: Joi.boolean().default(false),
+  COOKIE_CSRF_MAX_AGE_MS: Joi.number().integer().min(60000).default(7200000),
+  COOKIE_REFRESH_MAX_AGE_MS: Joi.number()
+    .integer()
+    .min(300000)
+    .default(604800000),
+  TRUST_PROXY: Joi.boolean().default(false),
+  HTTP_BODY_LIMIT: Joi.string().default('1mb'),
+  HTTP_URLENCODED_LIMIT: Joi.string().default('1mb'),
+  SWAGGER_ENABLED: Joi.boolean().optional(),
+  SWAGGER_PATH: Joi.string().default('docs'),
 
   DATABASE_URL: Joi.string().required(),
 
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  JWT_REFRESH_SECRET: Joi.string().required(),
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
+  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
+  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 });

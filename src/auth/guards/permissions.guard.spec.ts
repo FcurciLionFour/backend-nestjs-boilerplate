@@ -13,6 +13,9 @@ describe('PermissionsGuard', () => {
   } as unknown as Reflector;
 
   const prismaMock = {
+    user: {
+      findUnique: jest.fn(),
+    },
     userRole: {
       findMany: jest.fn(),
     },
@@ -51,6 +54,9 @@ describe('PermissionsGuard', () => {
     (reflectorMock.getAllAndOverride as jest.Mock)
       .mockReturnValueOnce([])
       .mockReturnValueOnce(['users.read']);
+    (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+      isActive: true,
+    });
     (prismaMock.userRole.findMany as jest.Mock).mockResolvedValue([]);
 
     const guard = new PermissionsGuard(reflectorMock, prismaMock);
@@ -58,5 +64,20 @@ describe('PermissionsGuard', () => {
     await expect(
       guard.canActivate(buildContext({ sub: 'user-1' })),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('throws unauthorized when user is inactive', async () => {
+    (reflectorMock.getAllAndOverride as jest.Mock)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce(['users.read']);
+    (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+      isActive: false,
+    });
+
+    const guard = new PermissionsGuard(reflectorMock, prismaMock);
+
+    await expect(
+      guard.canActivate(buildContext({ sub: 'user-1' })),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserResponseDto } from './dto/user-response.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -66,7 +68,7 @@ export class UsersService {
   }
 
   // ➕ CREAR USUARIO (ADMIN)
-  async create(data: { email: string; password: string; roles: string[] }) {
+  async create(data: CreateUserDto) {
     const exists = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -128,15 +130,7 @@ export class UsersService {
   }
 
   // ✏️ ACTUALIZAR USUARIO
-  async update(
-    id: string,
-    data: Partial<{
-      email: string;
-      isActive: boolean;
-      roles: string[];
-    }>,
-    requesterId: string,
-  ) {
+  async update(id: string, data: UpdateUserDto, requesterId: string) {
     await this.assertCanAccessUser(id, requesterId);
 
     const user = await this.prisma.user.findUnique({

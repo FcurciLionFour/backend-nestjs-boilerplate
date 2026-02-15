@@ -7,7 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -57,7 +57,7 @@ export class AuthService {
   /* ---------------- REFRESH ---------------- */
 
   async refresh(refreshToken: string, meta?: SessionMeta) {
-    let payload: any;
+    let payload: { sid: string };
 
     try {
       payload = this.jwt.verify(refreshToken, {
@@ -69,9 +69,19 @@ export class AuthService {
 
     const session = await this.prisma.authSession.findUnique({
       where: { id: payload.sid },
+      include: {
+        user: {
+          select: { isActive: true },
+        },
+      },
     });
 
-    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+    if (
+      !session ||
+      !session.user.isActive ||
+      session.revokedAt ||
+      session.expiresAt < new Date()
+    ) {
       throw new UnauthorizedException();
     }
 
@@ -168,12 +178,16 @@ export class AuthService {
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
 
+    const refreshMaxAgeMs =
+      this.config.get<number>('cookies.refreshMaxAgeMs') ??
+      7 * 24 * 60 * 60 * 1000;
+
     await this.prisma.authSession.create({
       data: {
         id: sessionId,
         userId,
         hashedRefreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + refreshMaxAgeMs),
         ip: meta?.ip,
         userAgent: meta?.userAgent,
         replacedById,
@@ -188,8 +202,13 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        isActive: true,
       },
     });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException();
+    }
+
     const roles = await this.prisma.userRole.findMany({
       where: { userId },
       include: {
@@ -205,8 +224,8 @@ export class AuthService {
 
     return {
       user: {
-        id: userId,
-        email: user!.email,
+        id: user.id,
+        email: user.email,
       },
       roles: roles.map((r) => r.role.name),
       permissions: [
@@ -228,11 +247,12 @@ export class AuthService {
 
     const token = randomUUID();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 30); // 30 min
+    const tokenHash = this.hashToken(token);
 
     await this.prisma.passwordResetToken.create({
       data: {
         userId: user.id,
-        token,
+        token: tokenHash,
         expiresAt,
       },
     });
@@ -243,8 +263,10 @@ export class AuthService {
     return { message: 'If the email exists, a reset link has been sent' };
   }
   async resetPassword(token: string, newPassword: string) {
+    const tokenHash = this.hashToken(token);
+
     const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { token },
+      where: { token: tokenHash },
       include: { user: true },
     });
 
@@ -308,6 +330,10 @@ export class AuthService {
     ]);
 
     return { message: 'Password updated successfully' };
+  }
+
+  private hashToken(value: string): string {
+    return createHash('sha256').update(value).digest('hex');
   }
 }
 

@@ -9,9 +9,8 @@ describe('JwtStrategy', () => {
 
     const strategy = new JwtStrategy(config);
 
-    expect(strategy.validate({ sub: 'user-1', role: 'ADMIN' })).toEqual({
+    expect(strategy.validate({ sub: 'user-1' })).toEqual({
       sub: 'user-1',
-      role: 'ADMIN',
     });
   });
 });

@@ -123,6 +123,7 @@ describe('AuthService', () => {
     prismaMock.authSession.findUnique.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
+      user: { isActive: true },
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60000),
       hashedRefreshToken: await bcrypt.hash('other', 10),
@@ -139,6 +140,7 @@ describe('AuthService', () => {
     prismaMock.authSession.findUnique.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
+      user: { isActive: true },
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60000),
       hashedRefreshToken: await bcrypt.hash('refresh-token', 10),
@@ -181,6 +183,18 @@ describe('AuthService', () => {
       message: 'If the email exists, a reset link has been sent',
     });
     expect(prismaMock.passwordResetToken.create).not.toHaveBeenCalled();
+  });
+
+  it('forgotPassword stores a hashed token instead of raw token', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1' });
+
+    await service.forgotPassword('user@test.com');
+
+    const createArg = prismaMock.passwordResetToken.create.mock.calls[0][0] as {
+      data: { token: string };
+    };
+    expect(createArg.data.token).toHaveLength(64);
+    expect(createArg.data.token).not.toContain('-');
   });
 
   it('resetPassword throws for expired token', async () => {

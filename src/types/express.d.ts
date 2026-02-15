@@ -6,5 +6,6 @@ declare module 'express' {
       sub: string;
       sid?: string;
     };
+    requestId?: string;
   }
 }

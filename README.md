@@ -1,98 +1,109 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# backend-nestjs-boilerplate
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Boilerplate backend con NestJS para aplicaciones SaaS, con autenticacion JWT, refresh token por cookie HttpOnly, CSRF, RBAC, rate-limit y Prisma.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Requisitos
 
-## Description
+- Node.js 22+
+- npm 10+
+- Base de datos PostgreSQL accesible por `DATABASE_URL`
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Configuracion local
 
-## Project setup
+1. Instalar dependencias:
 
 ```bash
-$ npm install
+npm ci
 ```
 
-## Compile and run the project
+2. Crear variables de entorno:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cp .env.example .env
 ```
 
-## Run tests
+3. Ajustar valores de `.env`:
+
+- `DATABASE_URL`
+- `JWT_ACCESS_SECRET` (>= 32 chars)
+- `JWT_REFRESH_SECRET` (>= 32 chars)
+- `CORS_ORIGINS`
+- `COOKIE_SAME_SITE` y `COOKIE_SECURE`
+- `SWAGGER_ENABLED=true` (recomendado en local)
+
+4. Ejecutar migraciones y seed:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run db:migrate:dev
+npm run db:seed
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+5. Levantar el servidor:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+6. Ver API docs:
 
-## Resources
+```bash
+http://localhost:3000/docs
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Scripts principales
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `npm run lint`: lint del proyecto.
+- `npm run lint:fix`: lint con autofix para desarrollo local.
+- `npm test`: pruebas unitarias.
+- `npm run test:e2e`: pruebas e2e.
+- `npm run test:cov`: cobertura (falla si no cumple `coverageThreshold` en `package.json`).
+- `npm run db:migrate:deploy`: ejecutar migraciones en deploy.
+- `npm run db:seed`: correr seed idempotente.
+- `npm run db:reset`: reset de DB en local.
+- `npm run new-project -- --name "my-api"`: bootstrap rapido para un proyecto nuevo.
+- `npm run feature:new -- --name invoices`: scaffold base de un modulo feature reusable.
+- `npm run start:prod:with-migrate`: corre migraciones y levanta app en modo prod.
+- `npm run docker:up`: levanta `api + postgres` con Docker Compose.
+- `npm run docker:down`: baja los contenedores locales.
+- `npm run smoke:test`: smoke test de `/health` y `/ready` (auth opcional por env vars).
+- `npm run build`: build de produccion.
+- `npm run start:prod`: ejecutar build compilado.
 
-## Support
+## CI
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Se define en `.github/workflows/ci.yml` y se ejecuta en:
 
-## Stay in touch
+- `push` a `master`
+- `pull_request` contra `master`
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Pasos del pipeline:
 
-## License
+1. `npm ci`
+2. `npm run lint`
+3. `npm test -- --runInBand`
+4. `npm run test:e2e -- --runInBand`
+5. `npm run test:cov -- --runInBand`
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+El paso de cobertura falla automaticamente si cae por debajo de los umbrales definidos en `package.json`.
+
+## Calidad y seguridad
+
+- Validacion de variables de entorno al bootstrap (`src/config/env.validation.ts`).
+- Auth con access token (Bearer) y refresh token por cookie.
+- Proteccion CSRF para endpoints sensibles (refresh/logout).
+- Autorizacion por roles/permisos (RBAC).
+- Rate-limit configurable por endpoint.
+- Endpoints de operacion: `GET /health` y `GET /ready`.
+- OpenAPI/Swagger habilitable por `SWAGGER_ENABLED` en `SWAGGER_PATH` (default `/docs`).
+
+## Documentacion operativa
+
+- Nueva instancia de proyecto: `docs/NEW_PROJECT.md`
+- Checklist de release SaaS: `docs/RELEASE_CHECKLIST.md`
+- Deploy agnostico de proveedor: `docs/DEPLOY.md`
+- Templates de entorno por ambiente: `docs/env/`
+- Versionado y releases: `docs/VERSIONING.md`
+- Template de modulo feature: `docs/FEATURE_MODULE_TEMPLATE.md`
+- Seguridad y auth: `docs/AUTH_AND_SECURITY.md`
+- Arquitectura: `docs/ARCHITECTURE.md`
+- Plan de pruebas backend: `docs/BACKEND_TEST_PLAN.md`
