@@ -8,7 +8,7 @@ import {
   Get,
 } from '@nestjs/common';
 
-import type { Request, Response } from 'express'; // 👈 CLAVE
+import type { Request, Response, CookieOptions } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
@@ -16,15 +16,34 @@ import { RegisterDto } from './dto/register.dto';
 import { randomUUID } from 'crypto';
 import { CsrfGuard } from './guards/csrf.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ConfigService } from '@nestjs/config';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
+
+  private getCookieOptions(httpOnly: boolean): CookieOptions {
+    const sameSite =
+      this.config.get<'lax' | 'strict' | 'none'>('cookies.sameSite') ?? 'lax';
+    const secure = this.config.get<boolean>('cookies.secure') ?? false;
+
+    return {
+      httpOnly,
+      sameSite,
+      secure,
+      path: '/',
+    };
+  }
+
   @Public()
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto.email, dto.password);
   }
+
   @Public()
   @Post('login')
   async login(
@@ -37,12 +56,11 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
     });
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-    });
+    res.cookie(
+      'refresh_token',
+      tokens.refreshToken,
+      this.getCookieOptions(true),
+    );
 
     return { accessToken: tokens.accessToken };
   }
@@ -59,19 +77,21 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refresh_token;
+    const refreshToken =
+      typeof req.cookies?.refresh_token === 'string'
+        ? req.cookies.refresh_token
+        : '';
 
     const tokens = await this.authService.refresh(refreshToken, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-    });
+    res.cookie(
+      'refresh_token',
+      tokens.refreshToken,
+      this.getCookieOptions(true),
+    );
 
     return { accessToken: tokens.accessToken };
   }
@@ -79,7 +99,10 @@ export class AuthController {
   @UseGuards(CsrfGuard)
   @Post('logout')
   logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies?.refresh_token;
+    const refreshToken =
+      typeof req.cookies?.refresh_token === 'string'
+        ? req.cookies.refresh_token
+        : '';
 
     res.clearCookie('refresh_token');
 
@@ -91,23 +114,17 @@ export class AuthController {
   getCsrf(@Res({ passthrough: true }) res: Response) {
     const csrfToken = randomUUID();
 
-    res.cookie('csrf_token', csrfToken, {
-      httpOnly: false, // clave para double submit
-      sameSite: 'lax', // luego puede ser 'none'
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-    });
+    res.cookie('csrf_token', csrfToken, this.getCookieOptions(false));
 
     return { ok: true };
   }
-  // 1️⃣ Forgot password (public)
+
   @Public()
   @Post('forgot-password')
   forgotPassword(@Body('email') email: string) {
     return this.authService.forgotPassword(email);
   }
 
-  // 2️⃣ Reset password (public, token-based)
   @Public()
   @Post('reset-password')
   resetPassword(
@@ -117,7 +134,6 @@ export class AuthController {
     return this.authService.resetPassword(token, newPassword);
   }
 
-  // 3️⃣ Change password (authenticated)
   @Post('change-password')
   changePassword(
     @CurrentUser() user: { sub: string },

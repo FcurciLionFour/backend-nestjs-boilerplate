@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserResponseDto } from './dto/user-response.dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
@@ -92,10 +93,13 @@ export class UsersService {
     }
 
     // 2️⃣ Crear usuario + asignar roles
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
     const user = await this.prisma.user.create({
       data: {
         email: data.email,
-        password: data.password, // 🔐 hash en AuthService
+        // Se hashea acá para cubrir también alta administrativa de usuarios.
+        password: hashedPassword,
         isActive: true,
         roles: {
           create: roles.map((role) => ({

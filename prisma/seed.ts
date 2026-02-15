@@ -70,15 +70,10 @@ async function main() {
     },
   });
 
-  await prisma.rolePermission.upsert({
+  // USER no debe poder listar usuarios en endpoints administrativos.
+  // Esto también corrige instalaciones existentes eliminando la relación previa.
+  await prisma.rolePermission.deleteMany({
     where: {
-      roleId_permissionId: {
-        roleId: userRole.id,
-        permissionId: usersRead.id,
-      },
-    },
-    update: {},
-    create: {
       roleId: userRole.id,
       permissionId: usersRead.id,
     },

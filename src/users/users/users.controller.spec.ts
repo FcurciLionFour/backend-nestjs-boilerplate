@@ -1,18 +1,24 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 
 describe('UsersController', () => {
-  let controller: UsersController;
+  const usersServiceMock: { findAll: jest.Mock } = {
+    findAll: jest.fn(),
+  };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [UsersController],
-    }).compile();
+  const controller = new UsersController(usersServiceMock as never);
 
-    controller = module.get<UsersController>(UsersController);
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('delegates findAll to service', async () => {
+    usersServiceMock.findAll.mockResolvedValue([
+      { id: '1', email: 'a@a.com', roles: ['USER'] },
+    ]);
+
+    const result = await controller.findAll();
+
+    expect(usersServiceMock.findAll).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(1);
   });
 });
