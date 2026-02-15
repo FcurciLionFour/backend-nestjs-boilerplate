@@ -27,6 +27,6 @@ export class JwtGlobalGuard extends JwtAuthGuard {
       return firstValueFrom(result);
     }
 
-    return result as boolean | Promise<boolean>;
+    return result;
   }
 }

@@ -3,17 +3,19 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
+  private readonly logger = new Logger(CsrfGuard.name);
+
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();
 
     const method = req.method.toUpperCase();
 
-    // solo proteger métodos mutativos
     const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     if (!isMutating) {
       return true;
@@ -21,10 +23,15 @@ export class CsrfGuard implements CanActivate {
 
     const csrfCookie = req.cookies?.['csrf_token'];
     const csrfHeader = req.headers['x-csrf-token'];
-    console.log('CSRF cookie:', req.cookies?.['csrf_token']);
-    console.log('CSRF header:', req.headers['x-csrf-token']);
 
     if (!csrfCookie || !csrfHeader) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'csrf.missing',
+          method,
+          path: req.originalUrl ?? req.url,
+        }),
+      );
       throw new ForbiddenException('CSRF token missing');
     }
 
@@ -36,6 +43,13 @@ export class CsrfGuard implements CanActivate {
           : undefined;
 
     if (!headerValue || csrfCookie !== headerValue) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'csrf.invalid',
+          method,
+          path: req.originalUrl ?? req.url,
+        }),
+      );
       throw new ForbiddenException('Invalid CSRF token');
     }
 
