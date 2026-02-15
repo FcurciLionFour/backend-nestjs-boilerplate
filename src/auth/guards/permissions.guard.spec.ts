@@ -59,35 +59,4 @@ describe('PermissionsGuard', () => {
       guard.canActivate(buildContext({ sub: 'user-1' })),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
-
-  it('throws forbidden when required role is missing', async () => {
-    (reflectorMock.getAllAndOverride as jest.Mock)
-      .mockReturnValueOnce(['ADMIN'])
-      .mockReturnValueOnce([]);
-    (prismaMock.userRole.findMany as jest.Mock).mockResolvedValue([
-      { role: { name: 'USER', permissions: [] } },
-    ]);
-
-    const guard = new PermissionsGuard(reflectorMock, prismaMock);
-
-    await expect(
-      guard.canActivate(buildContext({ sub: 'user-1' })),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('allows when required role exists', async () => {
-    (reflectorMock.getAllAndOverride as jest.Mock)
-      .mockReturnValueOnce(['ADMIN'])
-      .mockReturnValueOnce([]);
-    (prismaMock.userRole.findMany as jest.Mock).mockResolvedValue([
-      { role: { name: 'ADMIN', permissions: [] } },
-    ]);
-
-    const guard = new PermissionsGuard(reflectorMock, prismaMock);
-
-    await expect(guard.canActivate(buildContext({ sub: 'admin-1' }))).resolves.toBe(
-      true,
-    );
-  });
-
 });

@@ -28,6 +28,18 @@ interface UpdateUserBody {
   roles?: string[];
 }
 
+interface CreateUserBody {
+  email: string;
+  password: string;
+  roles: string[];
+}
+
+interface UpdateUserBody {
+  email?: string;
+  isActive?: boolean;
+  roles?: string[];
+}
+
 @Controller('users')
 @UseGuards(JwtGlobalGuard, PermissionsGuard)
 export class UsersController {
