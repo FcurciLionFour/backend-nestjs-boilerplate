@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
@@ -13,6 +14,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private config: ConfigService,
   ) {}
 
   /* ---------------- REGISTER / LOGIN ---------------- */
@@ -59,7 +61,7 @@ export class AuthService {
 
     try {
       payload = this.jwt.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: this.config.getOrThrow<string>('jwt.refreshSecret'),
       });
     } catch {
       throw new UnauthorizedException();
@@ -104,22 +106,35 @@ export class AuthService {
       return; // logout idempotente
     }
 
-    const hashed = await bcrypt.hash(refreshToken, 10);
+    let payload: { sid: string };
 
-    const session = await this.prisma.authSession.findFirst({
-      where: {
-        hashedRefreshToken: hashed,
-        revokedAt: null,
-      },
+    try {
+      payload = this.jwt.verify<{ sid: string }>(refreshToken, {
+        secret: this.config.getOrThrow<string>('jwt.refreshSecret'),
+      });
+    } catch {
+      return;
+    }
+
+    const session = await this.prisma.authSession.findUnique({
+      where: { id: payload.sid },
     });
 
-    if (!session) {
-      return; // ya revocada o inexistente
+    if (!session || session.revokedAt) {
+      return;
+    }
+
+    const valid = await bcrypt.compare(
+      refreshToken,
+      session.hashedRefreshToken,
+    );
+    if (!valid) {
+      return;
     }
 
     await this.prisma.authSession.update({
       where: { id: session.id },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date(), lastUsedAt: new Date() },
     });
   }
   async logoutAll(userId: string) {
@@ -146,8 +161,9 @@ export class AuthService {
     const accessToken = this.jwt.sign(payload);
 
     const refreshToken = this.jwt.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: '7d',
+      secret: this.config.getOrThrow<string>('jwt.refreshSecret'),
+      expiresIn: (this.config.get<string>('jwt.refreshExpiresIn') ??
+        '7d') as any,
     });
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
