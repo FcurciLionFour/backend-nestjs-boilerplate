@@ -33,6 +33,7 @@ cp .env.example .env
 - `SWAGGER_ALLOW_IN_PRODUCTION=true` (solo si queres exponer docs en prod)
 - `RATE_LIMIT_REDIS_URL` (recomendado para rate-limit distribuido en multi-instancia)
 - `LOGIN_LOCK_ENABLED`, `LOGIN_LOCK_REDIS_URL`, `LOGIN_MAX_FAILURES`, `LOGIN_ATTEMPT_WINDOW_MS`, `LOGIN_LOCK_BASE_MS`, `LOGIN_LOCK_MAX_MS` para lockout progresivo por `ip+email`
+- `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_USER_EMAIL`, `SEED_USER_PASSWORD` para crear usuarios de prueba via seed
 
 4. Ejecutar migraciones y seed:
 
@@ -111,6 +112,8 @@ El paso de cobertura falla automaticamente si cae por debajo de los umbrales def
 - Versionado y releases: `docs/VERSIONING.md`
 - Template de modulo feature: `docs/FEATURE_MODULE_TEMPLATE.md`
 - Seguridad y auth: `docs/AUTH_AND_SECURITY.md`
+- Pruebas manuales en Postman: `docs/POSTMAN_AUTH_TESTS.md`
+- Contrato de integracion frontend-backend: `docs/FRONTEND_BACKEND_ALIGNMENT.md`
 - Catalogo de errores de dominio: `docs/ERROR_CODES.md`
 - Governance de repositorio (branch protection + checks): `docs/REPO_GOVERNANCE.md`
 - Arquitectura: `docs/ARCHITECTURE.md`

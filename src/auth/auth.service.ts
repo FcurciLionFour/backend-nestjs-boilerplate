@@ -25,20 +25,36 @@ export class AuthService {
   async register(email: string, password: string, meta?: SessionMeta) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        isActive: true,
-        roles: {
-          create: {
-            role: {
-              connect: { name: 'USER' },
+    let user: { id: string };
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          isActive: true,
+          roles: {
+            create: {
+              role: {
+                connect: { name: 'USER' },
+              },
             },
           },
         },
-      },
-    });
+        select: {
+          id: true,
+        },
+      });
+    } catch (error: unknown) {
+      if (this.isEmailUniqueViolation(error)) {
+        throw new ForbiddenException({
+          code: ErrorCodes.USER_ALREADY_EXISTS,
+          message: 'User already exists',
+        });
+      }
+
+      throw error;
+    }
+
     return this.createSession(user.id, meta);
   }
 
@@ -114,7 +130,7 @@ export class AuthService {
       session.hashedRefreshToken,
     );
 
-    // 🔥 reuse detection
+    // Reuse detection.
     if (!valid) {
       await this.prisma.authSession.updateMany({
         where: { userId: session.userId },
@@ -127,12 +143,6 @@ export class AuthService {
       });
     }
 
-    // rotación
-    await this.prisma.authSession.update({
-      where: { id: session.id },
-      data: { revokedAt: new Date(), lastUsedAt: new Date() },
-    });
-
     return this.createSession(session.userId, meta, session.id);
   }
 
@@ -140,7 +150,7 @@ export class AuthService {
 
   async logout(refreshToken: string) {
     if (!refreshToken) {
-      return; // logout idempotente
+      return; // idempotent logout
     }
 
     let payload: { sid: string };
@@ -174,6 +184,7 @@ export class AuthService {
       data: { revokedAt: new Date(), lastUsedAt: new Date() },
     });
   }
+
   async logoutAll(userId: string) {
     await this.prisma.authSession.updateMany({
       where: { userId },
@@ -186,7 +197,7 @@ export class AuthService {
   private async createSession(
     userId: string,
     meta?: SessionMeta,
-    replacedById?: string,
+    replacedSessionId?: string,
   ) {
     const sessionId = randomUUID();
 
@@ -209,20 +220,39 @@ export class AuthService {
       this.config.get<number>('cookies.refreshMaxAgeMs') ??
       7 * 24 * 60 * 60 * 1000;
 
-    await this.prisma.authSession.create({
-      data: {
-        id: sessionId,
-        userId,
-        hashedRefreshToken,
-        expiresAt: new Date(Date.now() + refreshMaxAgeMs),
-        ip: meta?.ip,
-        userAgent: meta?.userAgent,
-        replacedById,
-      },
-    });
+    const nextSessionData = {
+      id: sessionId,
+      userId,
+      hashedRefreshToken,
+      expiresAt: new Date(Date.now() + refreshMaxAgeMs),
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+    };
+
+    if (!replacedSessionId) {
+      await this.prisma.authSession.create({
+        data: nextSessionData,
+      });
+    } else {
+      const rotationTimestamp = new Date();
+      await this.prisma.$transaction([
+        this.prisma.authSession.create({
+          data: nextSessionData,
+        }),
+        this.prisma.authSession.update({
+          where: { id: replacedSessionId },
+          data: {
+            revokedAt: rotationTimestamp,
+            lastUsedAt: rotationTimestamp,
+            replacedById: sessionId,
+          },
+        }),
+      ]);
+    }
 
     return { accessToken, refreshToken };
   }
+
   async getSession(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -265,12 +295,13 @@ export class AuthService {
       ],
     };
   }
+
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
-    // Respuesta neutra SIEMPRE
+    // Always return a neutral response.
     if (!user) {
       return { message: 'If the email exists, a reset link has been sent' };
     }
@@ -287,11 +318,12 @@ export class AuthService {
       },
     });
 
-    // 📧 Acá iría el mailer real
+    // Hook for mailer implementation.
     // link: `${FRONT_URL}/auth/reset-password?token=${token}`
 
     return { message: 'If the email exists, a reset link has been sent' };
   }
+
   async resetPassword(token: string, newPassword: string) {
     const tokenHash = this.hashToken(token);
 
@@ -310,19 +342,14 @@ export class AuthService {
     const hashed = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.$transaction([
-      // 1️⃣ actualizar password
       this.prisma.user.update({
         where: { id: resetToken.userId },
         data: { password: hashed },
       }),
-
-      // 2️⃣ invalidar token
       this.prisma.passwordResetToken.update({
         where: { id: resetToken.id },
         data: { usedAt: new Date() },
       }),
-
-      // 3️⃣ invalidar sesiones
       this.prisma.authSession.deleteMany({
         where: { userId: resetToken.userId },
       }),
@@ -330,6 +357,7 @@ export class AuthService {
 
     return { message: 'Password updated successfully' };
   }
+
   async changePassword(
     userId: string,
     currentPassword: string,
@@ -361,8 +389,6 @@ export class AuthService {
         where: { id: userId },
         data: { password: hashed },
       }),
-
-      // 🔐 forzar re-login
       this.prisma.authSession.deleteMany({
         where: { userId },
       }),
@@ -373,6 +399,30 @@ export class AuthService {
 
   private hashToken(value: string): string {
     return createHash('sha256').update(value).digest('hex');
+  }
+
+  private isEmailUniqueViolation(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const prismaError = error as {
+      code?: unknown;
+      meta?: {
+        target?: unknown;
+      };
+    };
+
+    if (prismaError.code !== 'P2002') {
+      return false;
+    }
+
+    const target = prismaError.meta?.target;
+    if (Array.isArray(target)) {
+      return target.includes('email');
+    }
+
+    return typeof target === 'string' && target.includes('email');
   }
 }
 

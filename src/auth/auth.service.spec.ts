@@ -93,6 +93,38 @@ describe('AuthService', () => {
     });
   });
 
+  it('register throws forbidden on duplicate email unique violation', async () => {
+    prismaMock.user.create.mockRejectedValue({
+      code: 'P2002',
+      meta: { target: ['email'] },
+    });
+
+    await expect(
+      service.register('dup@test.com', 'secret'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prismaMock.authSession.create).not.toHaveBeenCalled();
+  });
+
+  it('register rethrows non-email unique violations', async () => {
+    const dbError = new Error('db failed');
+    prismaMock.user.create.mockRejectedValue(dbError);
+
+    await expect(service.register('dup@test.com', 'secret')).rejects.toBe(
+      dbError,
+    );
+  });
+
+  it('register handles unique violation when prisma target is a string', async () => {
+    prismaMock.user.create.mockRejectedValue({
+      code: 'P2002',
+      meta: { target: 'User_email_key' },
+    });
+
+    await expect(
+      service.register('dup-string@test.com', 'secret'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('login throws for invalid credentials', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
 
@@ -162,7 +194,11 @@ describe('AuthService', () => {
 
     expect(prismaMock.authSession.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
-      data: { revokedAt: expect.any(Date), lastUsedAt: expect.any(Date) },
+      data: {
+        revokedAt: expect.any(Date),
+        lastUsedAt: expect.any(Date),
+        replacedById: expect.any(String),
+      },
     });
     expect(result.accessToken).toBeTruthy();
   });

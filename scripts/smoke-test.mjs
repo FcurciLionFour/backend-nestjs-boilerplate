@@ -29,8 +29,8 @@ async function runAuthSmoke() {
     body: JSON.stringify({ email, password }),
   });
 
-  if (loginRes.status !== 201) {
-    fail(`/auth/login returned ${loginRes.status}, expected 201`);
+  if (loginRes.status !== 200) {
+    fail(`/auth/login returned ${loginRes.status}, expected 200`);
   }
 
   const loginBody = await loginRes.json();

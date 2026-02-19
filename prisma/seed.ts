@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -75,40 +76,100 @@ async function main() {
     },
   });
 
-  const seedAdminEmail = process.env.SEED_ADMIN_EMAIL;
-  if (!seedAdminEmail) {
+  const seedAdminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Password123!';
+  const seedUserEmail = process.env.SEED_USER_EMAIL?.trim().toLowerCase();
+  const seedUserPassword = process.env.SEED_USER_PASSWORD ?? 'Password123!';
+
+  if (!seedAdminEmail && !seedUserEmail) {
     console.log(
-      'SEED_ADMIN_EMAIL not set, skipping automatic ADMIN role assignment.',
+      'SEED_ADMIN_EMAIL and SEED_USER_EMAIL not set, skipping test user creation.',
     );
     return;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: seedAdminEmail },
-  });
-
-  if (!user) {
-    console.warn(
-      `SEED_ADMIN_EMAIL=${seedAdminEmail} does not exist. Skipping ADMIN role assignment.`,
+  if (
+    seedAdminEmail &&
+    seedUserEmail &&
+    seedAdminEmail.toLowerCase() === seedUserEmail.toLowerCase()
+  ) {
+    throw new Error(
+      'SEED_ADMIN_EMAIL and SEED_USER_EMAIL must be different values.',
     );
-    return;
   }
 
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId: user.id,
+  if (seedAdminEmail) {
+    const adminPasswordHash = await bcrypt.hash(seedAdminPassword, 10);
+    const adminUser = await prisma.user.upsert({
+      where: { email: seedAdminEmail },
+      update: {
+        password: adminPasswordHash,
+        isActive: true,
+      },
+      create: {
+        email: seedAdminEmail,
+        password: adminPasswordHash,
+        isActive: true,
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: adminUser.id,
+          roleId: adminRole.id,
+        },
+      },
+      update: {},
+      create: {
+        userId: adminUser.id,
         roleId: adminRole.id,
       },
-    },
-    update: {},
-    create: {
-      userId: user.id,
-      roleId: adminRole.id,
-    },
-  });
+    });
 
-  console.log(`Assigned ADMIN role to ${seedAdminEmail}.`);
+    console.log(`Admin test user ensured: ${seedAdminEmail}`);
+  }
+
+  if (seedUserEmail) {
+    const userPasswordHash = await bcrypt.hash(seedUserPassword, 10);
+    const basicUser = await prisma.user.upsert({
+      where: { email: seedUserEmail },
+      update: {
+        password: userPasswordHash,
+        isActive: true,
+      },
+      create: {
+        email: seedUserEmail,
+        password: userPasswordHash,
+        isActive: true,
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: basicUser.id,
+          roleId: userRole.id,
+        },
+      },
+      update: {},
+      create: {
+        userId: basicUser.id,
+        roleId: userRole.id,
+      },
+    });
+
+    await prisma.userRole.deleteMany({
+      where: {
+        userId: basicUser.id,
+        roleId: {
+          not: userRole.id,
+        },
+      },
+    });
+
+    console.log(`User test user ensured (USER only): ${seedUserEmail}`);
+  }
 }
 
 main()

@@ -435,7 +435,7 @@ describe('Auth Security (e2e)', () => {
     await agent
       .post('/auth/login')
       .send({ email: 'user1@test.com', password: 'Password123' })
-      .expect(201);
+      .expect(200);
 
     await agent.post('/auth/refresh').expect(403);
   });
@@ -451,7 +451,7 @@ describe('Auth Security (e2e)', () => {
     const loginRes = await agent
       .post('/auth/login')
       .send({ email: 'reuse@test.com', password: 'Password123' })
-      .expect(201);
+      .expect(200);
 
     const oldRefreshToken = readCookie(loginRes, 'refresh_token');
 
@@ -461,7 +461,7 @@ describe('Auth Security (e2e)', () => {
     await agent
       .post('/auth/refresh')
       .set('x-csrf-token', csrfToken)
-      .expect(201);
+      .expect(200);
 
     await request(app.getHttpServer())
       .post('/auth/refresh')
@@ -486,17 +486,14 @@ describe('Auth Security (e2e)', () => {
     const loginRes = await agent
       .post('/auth/login')
       .send({ email: 'logout@test.com', password: 'Password123' })
-      .expect(201);
+      .expect(200);
     const { accessToken } = loginRes.body as { accessToken: string };
+    expect(accessToken).toBeDefined();
 
     const csrfRes = await agent.get('/auth/csrf').expect(200);
     const csrfToken = readCookie(csrfRes, 'csrf_token');
 
-    await agent
-      .post('/auth/logout')
-      .set('x-csrf-token', csrfToken)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(201);
+    await agent.post('/auth/logout').set('x-csrf-token', csrfToken).expect(204);
 
     await agent
       .post('/auth/refresh')
@@ -538,7 +535,7 @@ describe('Auth Security (e2e)', () => {
     const userLoginRes = await agent
       .post('/auth/login')
       .send({ email: 'rbac@test.com', password: 'Password123' })
-      .expect(201);
+      .expect(200);
 
     const userAccessToken = userLoginRes.body.accessToken as string;
 
@@ -552,7 +549,7 @@ describe('Auth Security (e2e)', () => {
     const adminLoginRes = await agent
       .post('/auth/login')
       .send({ email: 'rbac@test.com', password: 'Password123' })
-      .expect(201);
+      .expect(200);
 
     const adminAccessToken = adminLoginRes.body.accessToken as string;
 

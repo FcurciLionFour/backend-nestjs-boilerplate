@@ -160,7 +160,7 @@ src/
 - `auth` is isolated and reusable.
 - `audit` is cross-cutting and easy to apply globally.
 - `users` is core domain for identity and admin user management.
-- `modules/*` is where client-specific business logic lives.
+- `src/<business-module>/*` is where client-specific business logic lives.
 
 ---
 
@@ -184,7 +184,7 @@ If you want “never touch core again”, keep these invariants:
 
 When you build new features, you will mostly do:
 
-- Add new module in `src/modules/<x>`
+- Add new module in `src/<x>`
 - Add a permission key if feature is admin-level (seed it)
 - Add a scope helper if feature is ownership-level
 - Add controller endpoints with correct decorators
@@ -219,3 +219,4 @@ Happens when ownership logic is duplicated outside a shared helper. Keep checks 
 - `DATABASE_COMMUNICATION.md`
 - `BOOTSTRAP_NEW_WEBAPP.md`
 - `BACKEND_TEST_PLAN.md`
+

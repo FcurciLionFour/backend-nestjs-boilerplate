@@ -57,7 +57,7 @@ export class UsersController {
   @ApiOkResponse({ description: 'Current user identity' })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })
   me(@CurrentUser() user: { sub: string }) {
-    return user;
+    return this.usersService.findById(user.sub, user.sub);
   }
 
   @Get(':id')

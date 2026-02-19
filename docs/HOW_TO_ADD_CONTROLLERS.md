@@ -37,7 +37,7 @@ Examples:
 
 Create module folder:
 ```
-src/modules/<entity>/
+src/<entity>/
   dto/
   <entity>.controller.ts
   <entity>.service.ts
@@ -163,3 +163,4 @@ When adding a new role (e.g., SUPPORT):
 - [ ] Explicit Prisma selects/includes
 - [ ] Audit logs for mutations (if required)
 - [ ] E2E tests updated
+

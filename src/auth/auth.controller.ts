@@ -6,6 +6,8 @@ import {
   Res,
   UseGuards,
   Get,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 
 import type { Request, Response, CookieOptions } from 'express';
@@ -32,6 +34,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiNoContentResponse,
 } from '@nestjs/swagger';
 import { AccessTokenResponseDto, OkResponseDto } from './dto/auth-response.dto';
 import {
@@ -93,9 +96,10 @@ export class AuthController {
   @RateLimit({ limit: 10, windowMs: 60000 })
   @Public()
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ type: LoginDto })
-  @ApiCreatedResponse({ type: AccessTokenResponseDto })
+  @ApiOkResponse({ type: AccessTokenResponseDto })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })
   async login(
@@ -130,8 +134,9 @@ export class AuthController {
   @RateLimit({ limit: 20, windowMs: 60000 })
   @Public()
   @Post('refresh')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token with refresh cookie + CSRF' })
-  @ApiCreatedResponse({ type: AccessTokenResponseDto })
+  @ApiOkResponse({ type: AccessTokenResponseDto })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
   async refresh(
@@ -159,13 +164,17 @@ export class AuthController {
 
   @UseGuards(CsrfGuard, RateLimitGuard)
   @RateLimit({ limit: 30, windowMs: 60000 })
+  @Public()
   @Post('logout')
-  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Logout current session' })
-  @ApiCreatedResponse({ description: 'Session revoked' })
+  @ApiNoContentResponse({ description: 'Session revoked' })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
-  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
     const refreshToken =
       typeof req.cookies?.refresh_token === 'string'
         ? req.cookies.refresh_token
@@ -173,7 +182,7 @@ export class AuthController {
 
     res.clearCookie('refresh_token', this.getRefreshCookieOptions());
 
-    return this.authService.logout(refreshToken);
+    await this.authService.logout(refreshToken);
   }
 
   @Public()
@@ -192,9 +201,10 @@ export class AuthController {
   @RateLimit({ limit: 5, windowMs: 60000 })
   @Public()
   @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset token' })
   @ApiBody({ type: ForgotPasswordDto })
-  @ApiCreatedResponse({ description: 'Neutral response for security reasons' })
+  @ApiOkResponse({ description: 'Neutral response for security reasons' })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
@@ -204,9 +214,10 @@ export class AuthController {
   @RateLimit({ limit: 5, windowMs: 60000 })
   @Public()
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with a valid reset token' })
   @ApiBody({ type: ResetPasswordDto })
-  @ApiCreatedResponse({ description: 'Password updated' })
+  @ApiOkResponse({ description: 'Password updated' })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -216,10 +227,11 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit({ limit: 5, windowMs: 60000 })
   @Post('change-password')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change password for authenticated user' })
   @ApiBody({ type: ChangePasswordDto })
-  @ApiCreatedResponse({ description: 'Password updated' })
+  @ApiOkResponse({ description: 'Password updated' })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
   @ApiUnauthorizedResponse({ type: ErrorResponseDto })

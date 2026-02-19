@@ -66,7 +66,7 @@ Un backend “base” para webapps que:
 
 ### Roles/Permissions (mínimo)
 - Role `ADMIN`: `users.read`, `users.write`
-- Role `USER`: `users.read` (y scope limita a self cuando aplique)
+- Role `USER`: sin permisos administrativos por defecto (least privilege)
 
 ---
 
@@ -107,7 +107,7 @@ Un backend “base” para webapps que:
 5) **POST /auth/register**
 - Request body: email/password válidos
 - Esperado:
-  - 201/200 según implementación
+  - 201
   - access token en body
   - refresh cookie seteada (`refresh_token`)
   - audit log (si el interceptor registra este endpoint)
@@ -134,7 +134,7 @@ Un backend “base” para webapps que:
 - Headers: `x-csrf-token: {{csrfToken}}`
 - Acción: `POST {{baseUrl}}/auth/refresh`
 - Esperado:
-  - 200 o 201 (documentar)
+  - 200
   - nuevo access token en body
   - refresh cookie rotada
   - `AuthSession` nueva o marcada como reemplazada (según diseño)
@@ -152,7 +152,7 @@ Un backend “base” para webapps que:
 12) **POST /auth/logout con CSRF OK**
 - Headers: `x-csrf-token: {{csrfToken}}`
 - Esperado:
-  - 200/204
+  - 204 (sin body)
   - refresh cookie inválida/limpiada o sesión revocada
   - refresh posterior falla (401/403)
 
@@ -188,7 +188,7 @@ Un backend “base” para webapps que:
 18) **ADMIN create**
 - Endpoint: `POST /users`
 - Permiso: `users.write`
-- Esperado: 201/200 + usuario creado
+- Esperado: 201 + usuario creado
 
 19) **USER create**
 - Endpoint: `POST /users`
@@ -273,4 +273,8 @@ Para cumplir tu objetivo (“no tocar nada salvo negocio nuevo”):
 - Mantener el core de auth/guards/interceptors estable.
 - Agregar permisos nuevos solo por seed/migración + decorators en endpoints nuevos.
 - Scope: centralizar en helpers (como hicimos con users) y reutilizar patrón para recursos nuevos.
+
+
+
+
 

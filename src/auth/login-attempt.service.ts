@@ -18,6 +18,8 @@ interface LoginAttemptRecord {
 @Injectable()
 export class LoginAttemptService implements OnModuleInit, OnModuleDestroy {
   private readonly attempts = new Map<string, LoginAttemptRecord>();
+  private lastMemoryCleanupAt = 0;
+  private readonly memoryCleanupIntervalMs = 60_000;
   private readonly logger = new Logger(LoginAttemptService.name);
   private redisClient: null | {
     connect: () => Promise<void>;
@@ -101,6 +103,7 @@ export class LoginAttemptService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    this.cleanupExpiredAttempts(now);
     const current = this.attempts.get(key);
 
     if (!current) {
@@ -176,6 +179,7 @@ export class LoginAttemptService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    this.cleanupExpiredAttempts(now);
     const current = this.attempts.get(key);
 
     const nextFailures =
@@ -199,6 +203,7 @@ export class LoginAttemptService implements OnModuleInit, OnModuleDestroy {
 
   resetForTests(): void {
     this.attempts.clear();
+    this.lastMemoryCleanupAt = 0;
   }
 
   private throwLocked(lockUntil: number, now: number): void {
@@ -245,5 +250,22 @@ export class LoginAttemptService implements OnModuleInit, OnModuleDestroy {
 
   private getMaxLockMs(): number {
     return this.config.get<number>('loginProtection.maxLockMs') ?? 30 * 60_000;
+  }
+
+  private cleanupExpiredAttempts(now: number): void {
+    if (now - this.lastMemoryCleanupAt < this.memoryCleanupIntervalMs) {
+      return;
+    }
+
+    const windowMs = this.getWindowMs();
+    for (const [key, record] of this.attempts.entries()) {
+      const isExpiredWindow = now - record.lastFailureAt > windowMs;
+      const lockExpired = record.lockUntil <= now;
+      if (isExpiredWindow && lockExpired) {
+        this.attempts.delete(key);
+      }
+    }
+
+    this.lastMemoryCleanupAt = now;
   }
 }

@@ -38,7 +38,6 @@ Example:
 DATABASE_URL="postgresql://user:pass@localhost:5432/app?schema=public"
 JWT_ACCESS_SECRET="replace"
 JWT_REFRESH_SECRET="replace"
-CSRF_SECRET="replace"
 ```
 
 If cross-domain cookies are needed:

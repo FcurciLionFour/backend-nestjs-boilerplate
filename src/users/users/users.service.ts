@@ -3,18 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { UserResponseDto } from './dto/user-response.dto';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { ErrorCodes } from 'src/common/errors/error-codes';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UserResponseDto } from './dto/user-response.dto';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  // 📖 LISTAR USUARIOS (ADMIN)
   async findAll(): Promise<UserResponseDto[]> {
     const users = await this.prisma.user.findMany({
       where: {
@@ -38,7 +37,6 @@ export class UsersService {
     }));
   }
 
-  // 🔍 OBTENER USUARIO
   async findById(
     id: string,
     requesterId: string,
@@ -71,7 +69,6 @@ export class UsersService {
     };
   }
 
-  // ➕ CREAR USUARIO (ADMIN)
   async create(data: CreateUserDto) {
     const exists = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -91,7 +88,6 @@ export class UsersService {
       });
     }
 
-    // 1️⃣ Buscar roles válidos
     const roles = await this.prisma.role.findMany({
       where: {
         name: {
@@ -107,33 +103,48 @@ export class UsersService {
       });
     }
 
-    // 2️⃣ Crear usuario + asignar roles
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: data.email,
-        // Se hashea acá para cubrir también alta administrativa de usuarios.
-        password: hashedPassword,
-        isActive: true,
-        roles: {
-          create: roles.map((role) => ({
-            role: {
-              connect: { id: role.id },
-            },
-          })),
-        },
-      },
-      select: {
-        id: true,
-        email: true,
-        roles: {
-          include: {
-            role: true,
+    let user: {
+      id: string;
+      email: string;
+      roles: Array<{ role: { name: string } }>;
+    };
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: data.email,
+          // Hash password here too for admin-driven user creation.
+          password: hashedPassword,
+          isActive: true,
+          roles: {
+            create: roles.map((role) => ({
+              role: {
+                connect: { id: role.id },
+              },
+            })),
           },
         },
-      },
-    });
+        select: {
+          id: true,
+          email: true,
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
+    } catch (error: unknown) {
+      if (this.isEmailUniqueViolation(error)) {
+        throw new ForbiddenException({
+          code: ErrorCodes.USER_ALREADY_EXISTS,
+          message: 'User already exists',
+        });
+      }
+
+      throw error;
+    }
 
     return {
       id: user.id,
@@ -142,7 +153,6 @@ export class UsersService {
     };
   }
 
-  // ✏️ ACTUALIZAR USUARIO
   async update(id: string, data: UpdateUserDto, requesterId: string) {
     await this.assertCanAccessUser(id, requesterId);
 
@@ -157,18 +167,26 @@ export class UsersService {
       });
     }
 
-    // 1️⃣ Separar roles del resto del payload
     const { roles, ...userData } = data;
 
-    // 2️⃣ Actualizar campos simples si existen
     if (Object.keys(userData).length > 0) {
-      await this.prisma.user.update({
-        where: { id },
-        data: userData,
-      });
+      try {
+        await this.prisma.user.update({
+          where: { id },
+          data: userData,
+        });
+      } catch (error: unknown) {
+        if (this.isEmailUniqueViolation(error)) {
+          throw new ForbiddenException({
+            code: ErrorCodes.USER_ALREADY_EXISTS,
+            message: 'User already exists',
+          });
+        }
+
+        throw error;
+      }
     }
 
-    // 3️⃣ Si vienen roles → reemplazarlos
     if (roles) {
       if (roles.length === 0) {
         throw new ForbiddenException({
@@ -190,12 +208,10 @@ export class UsersService {
         });
       }
 
-      // limpiar relaciones actuales
       await this.prisma.userRole.deleteMany({
         where: { userId: id },
       });
 
-      // crear nuevas relaciones
       await this.prisma.userRole.createMany({
         data: dbRoles.map((role) => ({
           userId: id,
@@ -204,7 +220,6 @@ export class UsersService {
       });
     }
 
-    // 4️⃣ Devolver estado final consistente
     const updated = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -227,7 +242,6 @@ export class UsersService {
     };
   }
 
-  // 🗑️ BORRAR USUARIO (soft delete)
   async remove(id: string, requesterId: string) {
     await this.assertCanAccessUser(id, requesterId);
     const user = await this.prisma.user.findUnique({
@@ -250,11 +264,11 @@ export class UsersService {
 
     return { success: true };
   }
+
   private async assertCanAccessUser(
     targetUserId: string,
     requesterUserId: string,
   ): Promise<void> {
-    // 1️⃣ Si es ADMIN → acceso total
     const isAdmin = await this.prisma.userRole.findFirst({
       where: {
         userId: requesterUserId,
@@ -268,15 +282,37 @@ export class UsersService {
       return;
     }
 
-    // 2️⃣ Si no es admin, solo puede acceder a sí mismo
     if (targetUserId === requesterUserId) {
       return;
     }
 
-    // 3️⃣ Caso contrario → forbidden
     throw new ForbiddenException({
       code: ErrorCodes.ACCESS_DENIED,
       message: 'Access denied',
     });
+  }
+
+  private isEmailUniqueViolation(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const prismaError = error as {
+      code?: unknown;
+      meta?: {
+        target?: unknown;
+      };
+    };
+
+    if (prismaError.code !== 'P2002') {
+      return false;
+    }
+
+    const target = prismaError.meta?.target;
+    if (Array.isArray(target)) {
+      return target.includes('email');
+    }
+
+    return typeof target === 'string' && target.includes('email');
   }
 }

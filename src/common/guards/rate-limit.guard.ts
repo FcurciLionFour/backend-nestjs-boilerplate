@@ -33,6 +33,8 @@ export class RateLimitGuard
   implements CanActivate, OnModuleInit, OnModuleDestroy
 {
   private static readonly counters = new Map<string, CounterEntry>();
+  private static lastMemoryCleanupAt = 0;
+  private static readonly memoryCleanupIntervalMs = 60_000;
   private readonly logger = new Logger(RateLimitGuard.name);
   private redisClient: null | {
     eval: (script: string, options: unknown) => Promise<[number, number]>;
@@ -43,6 +45,7 @@ export class RateLimitGuard
 
   static resetForTests(): void {
     RateLimitGuard.counters.clear();
+    RateLimitGuard.lastMemoryCleanupAt = 0;
   }
 
   constructor(
@@ -116,7 +119,9 @@ export class RateLimitGuard
     const res = context.switchToHttp().getResponse<Response>();
     const now = Date.now();
 
-    const route = req.originalUrl ?? req.url ?? context.getHandler().name;
+    const route = this.normalizeRoute(
+      req.originalUrl ?? req.url ?? context.getHandler().name,
+    );
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const key = `${ip}:${req.method}:${route}`;
     const incrementResult = await this.incrementCounter(key, options.windowMs);
@@ -177,6 +182,7 @@ export class RateLimitGuard
     }
 
     const now = Date.now();
+    this.cleanupExpiredCounters(now);
     const existing = RateLimitGuard.counters.get(key);
 
     if (!existing || existing.resetAt <= now) {
@@ -190,6 +196,28 @@ export class RateLimitGuard
 
     existing.count += 1;
     return existing;
+  }
+
+  private normalizeRoute(route: string): string {
+    const [baseRoute] = route.split('?');
+    return baseRoute || '/';
+  }
+
+  private cleanupExpiredCounters(now: number): void {
+    if (
+      now - RateLimitGuard.lastMemoryCleanupAt <
+      RateLimitGuard.memoryCleanupIntervalMs
+    ) {
+      return;
+    }
+
+    for (const [counterKey, counter] of RateLimitGuard.counters.entries()) {
+      if (counter.resetAt <= now) {
+        RateLimitGuard.counters.delete(counterKey);
+      }
+    }
+
+    RateLimitGuard.lastMemoryCleanupAt = now;
   }
 
   private setHeaders(
